@@ -1062,7 +1062,7 @@ function actorModelConfig(actorId) {
     return {
       name: "threejs_robot_expressive",
       path: "/static/assets/vendor/threejs/RobotExpressive/RobotExpressive.glb",
-      scale: 0.78,
+      scale: 0.42,
       rotationY: Math.PI,
       fallbackColor: 0xff9b54,
     };

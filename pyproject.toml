@@ -48,5 +48,5 @@ files = ["src/agentic_game_demo", "tests"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "handson"]
 addopts = "-s"

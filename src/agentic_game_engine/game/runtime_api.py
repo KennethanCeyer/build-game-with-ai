@@ -212,7 +212,7 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
 
 def main() -> None:
     uvicorn.run(
-        "agentic_game_demo.runtime_api:create_app", factory=True, host="127.0.0.1", port=8787
+        "agentic_game_engine.game.runtime_api:create_app", factory=True, host="127.0.0.1", port=8787
     )
 
 

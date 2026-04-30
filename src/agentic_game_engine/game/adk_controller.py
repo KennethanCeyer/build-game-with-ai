@@ -17,7 +17,7 @@ from .adk_trace import (
     summarize_tool_response,
     trace_from_adk_events,
 )
-from ..agent_setup import build_loop_agent
+from agentic_game_demo.agent_setup import build_loop_agent
 from .model_config import DIRECTOR_MODEL, QA_MODEL, VISION_MODEL, AgentModelProfile
 from .simulation import RuntimeSimulator
 
@@ -140,7 +140,7 @@ def _run_real_adk_turn(
 
 
 def _build_runner(model: str) -> tuple[Runner, str]:
-    app_name = "agentic_game_demo"
+    app_name = "agentic_game_engine"
     user_id = "browser"
     session_id = f"turn-{uuid4()}"
     session_service = InMemorySessionService()
@@ -269,7 +269,7 @@ def _validated_answer(user_message: str, answer: str, state: dict[str, Any]) -> 
 def _ensure_google_api_key() -> None:
     if os.getenv("GOOGLE_API_KEY"):
         return
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[3]
     env_path = root / ".env"
     if env_path.exists():
         for line in env_path.read_text(encoding="utf-8").splitlines():

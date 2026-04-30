@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agentic_game_demo.game.a2a_cards import build_a2a_task, public_agent_cards
+from agentic_game_engine.game.a2a_cards import build_a2a_task, public_agent_cards
 
 
 def test_public_agent_cards_include_qa_agent() -> None:
