@@ -17,8 +17,13 @@ from .adk_trace import (
     summarize_tool_response,
     trace_from_adk_events,
 )
-from agentic_game_demo.agent_setup import build_loop_agent
-from .model_config import DIRECTOR_MODEL, QA_MODEL, VISION_MODEL, AgentModelProfile
+from agentic_game_demo.agent import build_loop_agent
+from .model_config import (
+    DIRECTOR_MODEL,
+    QA_MODEL,
+    VISION_MODEL,
+    AgentModelProfile,
+)
 from .simulation import RuntimeSimulator
 
 
@@ -280,5 +285,6 @@ def _ensure_google_api_key() -> None:
                 os.environ["GOOGLE_API_KEY"] = value
                 return
     raise RuntimeError(
-        "GOOGLE_API_KEY is required. Put it in the workspace root .env file as GOOGLE_API_KEY=..."
+        "GOOGLE_API_KEY is required. "
+        "Put it in the workspace root .env file as GOOGLE_API_KEY=..."
     )

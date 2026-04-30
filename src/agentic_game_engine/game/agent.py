@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agentic_game_demo.agent_setup import build_loop_agent
+from agentic_game_demo.agent import build_loop_agent
 
 
 # ADK discovers this symbol when users run `adk run ./src/agentic_game_engine`.
