@@ -100,21 +100,34 @@ def answer_from_tool_events(tool_events: list[dict[str, Any]]) -> str:
 def normalize_model_frames(frames: list[dict[str, Any]]) -> list[dict[str, Any]]:
     normalized: list[dict[str, Any]] = []
     allowed = {"KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "Space", "KeyE"}
+    mapping = {
+        "W": "KeyW", "A": "KeyA", "S": "KeyS", "D": "KeyD",
+        "E": "KeyE", "Shift": "ShiftLeft", "w": "KeyW", "a": "KeyA",
+        "s": "KeyS", "d": "KeyD", "e": "KeyE"
+    }
     for frame in frames:
         keys = frame.get("keys")
         if not keys and isinstance(frame.get("keyboard_state"), dict):
             keys = [
                 key
                 for key, pressed in frame["keyboard_state"].items()
-                if pressed is True and key in allowed
+                if pressed is True
             ]
         if not keys:
-            keys = [key for key in allowed if frame.get(key) is True]
-        normalized_keys = [str(key) for key in keys or [] if str(key) in allowed]
+            keys = [k for k in (list(mapping.keys()) + list(allowed)) if frame.get(k) is True]
+            
+        raw_keys = [str(k) for k in keys or []]
+        normalized_keys: list[str] = []
+        for k in raw_keys:
+            if k in allowed:
+                normalized_keys.append(k)
+            elif k in mapping:
+                normalized_keys.append(mapping[k])
+
         raw_duration = int(frame.get("duration_ms", frame.get("duration", 120)))
         max_duration = 650 if normalized_keys else 180
         duration_ms = max(60, min(max_duration, raw_duration))
-        normalized.append({"keys": normalized_keys, "duration_ms": duration_ms})
+        normalized.append({"keys": list(set(normalized_keys)), "duration_ms": duration_ms})
     return normalized
 
 

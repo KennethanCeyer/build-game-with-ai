@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from .a2a_cards import public_agent_cards
 from .adk_controller import _run_real_adk_turn, run_real_adk_turn
 from .contracts import Gait
-from .model_config import workshop_model_profiles
+from agentic_game_demo.agent import workshop_model_profiles
 from .simulation import RuntimeSimulator, create_default_simulator
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from .model_config import QA_MODEL
+from agentic_game_demo.agent import QA_MODEL
 
 
 @dataclass(frozen=True)
