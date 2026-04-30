@@ -1,0 +1,9 @@
+**/.env
+**/.env.*
+!**/.env.example
+**/.adk/
+**/__pycache__/
+
+.benchmarks/
+.mypy_cache/
+.pytest_cache/

@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Playtest Lab</title>
+    <link rel="stylesheet" href="/static/styles.css?v=20260430-8" />
+    <link
+      rel="preload"
+      href="/static/assets/vendor/threejs/Soldier.glb"
+      as="fetch"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/static/assets/vendor/quaternius/base-characters/Superhero_Female_FullBody.gltf"
+      as="fetch"
+      crossorigin="anonymous"
+    />
+    <link
+      rel="preload"
+      href="/static/assets/vendor/quaternius/base-characters/Superhero_Male_FullBody.gltf"
+      as="fetch"
+      crossorigin="anonymous"
+    />
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "/static/assets/vendor/threejs/build/three.module.js",
+          "three/addons/": "/static/assets/vendor/threejs/examples/jsm/"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="scene"></canvas>
+      <section id="hud" aria-label="Runtime state">
+        <div class="hud-row">
+          <strong id="scenarioName">Loading</strong>
+          <span id="statusBadge">ready</span>
+        </div>
+        <div id="goals"></div>
+        <div class="button-row">
+          <button data-command="현재 화면과 상태를 보고 다음에 무엇을 할 수 있는지 짧게 설명해줘">상태 보기</button>
+          <button data-command="미로를 순간이동 없이 입력만으로 탈출해봐">미로 탈출</button>
+          <button data-command="퍼즐을 관찰해서 입력 버퍼만으로 풀어봐">퍼즐 풀기</button>
+          <button data-command="NPC 퀘스트를 대화와 화면 단서만 보고 입력 버퍼로 완료해봐">NPC 퀘스트</button>
+          <button id="resetButton">초기화</button>
+        </div>
+        <div class="controls-help" aria-label="Controls">
+          <span><kbd>WASD</kbd> 이동</span>
+          <span><kbd>Shift</kbd> 달리기</span>
+          <span><kbd>Space</kbd> 점프</span>
+          <span><kbd>E</kbd> 상호작용</span>
+          <span><kbd>I</kbd> 인벤토리</span>
+          <span><kbd>Drag</kbd> 카메라</span>
+          <span><kbd>Wheel</kbd> 줌</span>
+        </div>
+        <div id="interactionHint" class="interaction-hint">가까운 상호작용 대상 없음</div>
+        <button id="consoleToggle" class="wide-button">에이전트 콘솔</button>
+        <ol id="events"></ol>
+      </section>
+      <section id="dialogueBox" aria-label="NPC dialogue">
+        <strong id="dialogueSpeaker"></strong>
+        <p id="dialogueLine"></p>
+      </section>
+      <section id="inventoryPanel" aria-label="Inventory">
+        <div class="inventory-title">인벤토리</div>
+        <div id="inventoryItems"></div>
+      </section>
+      <section id="console" aria-label="Agent console">
+        <div class="console-header">
+          <strong>에이전트 대화</strong>
+          <button id="consoleClose" type="button">닫기</button>
+        </div>
+        <div class="command-palette">
+          <button type="button" data-command="/help">도움말</button>
+          <button type="button" data-command="미로를 입력만으로 탈출해보고 실패하면 다시 계획해줘">미로 탈출</button>
+          <button type="button" data-command="퍼즐을 화면 단서 기반으로 풀고 호출 그래프를 보여줘">퍼즐 풀기</button>
+          <button type="button" data-command="NPC 퀘스트를 대화와 화면 단서만 보고 입력 버퍼로 완료해봐">NPC 퀘스트</button>
+        </div>
+        <div id="consoleLog"></div>
+        <form id="consoleForm">
+          <span>&gt;</span>
+          <input
+            id="consoleInput"
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="/help 또는 자연어로 요청하세요"
+          />
+          <button type="submit">보내기</button>
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/static/main.js?v=20260430-8"></script>
+  </body>
+</html>

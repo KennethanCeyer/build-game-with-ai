@@ -1,0 +1,16 @@
+Metadata-Version: 2.4
+Name: agentic-game-demo
+Version: 0.1.0
+Summary: Hands-on ADK + A2A + indie game QA demo with a small 3D simulation runtime.
+Requires-Python: >=3.11
+Requires-Dist: fastapi>=0.110
+Requires-Dist: uvicorn>=0.29
+Requires-Dist: pydantic>=2.7
+Requires-Dist: pillow>=10.0
+Requires-Dist: google-adk<2,>=1.28
+Requires-Dist: mcp<2,>=1.27
+Provides-Extra: dev
+Requires-Dist: black>=24.0; extra == "dev"
+Requires-Dist: mypy>=1.10; extra == "dev"
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: httpx>=0.27; extra == "dev"

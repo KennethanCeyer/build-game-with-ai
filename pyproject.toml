@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentic-game-demo"
+version = "0.1.0"
+description = "Hands-on ADK + A2A + indie game QA demo with a small 3D simulation runtime."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+    "pydantic>=2.7",
+    "pillow>=10.0",
+    "google-adk>=1.28,<2",
+    "mcp>=1.27,<2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black>=24.0",
+    "mypy>=1.10",
+    "pytest>=8.0",
+    "httpx>=0.27",
+]
+
+[project.scripts]
+agentic-game-demo = "agentic_game_demo.runtime_api:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = "src"
+ignore_missing_imports = true
+check_untyped_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_return_any = true
+warn_unused_configs = true
+pretty = true
+files = ["src/agentic_game_demo", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-s"
