@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentic_game_engine.game.memory import JsonlMemoryStore
+from engine.game.memory import JsonlMemoryStore
 
 
 def test_memory_store_searches_records(tmp_path: Path) -> None:

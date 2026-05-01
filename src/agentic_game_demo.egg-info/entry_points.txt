@@ -1,2 +1,0 @@
-[console_scripts]
-agentic-game-demo = agentic_game_demo.runtime_api:main

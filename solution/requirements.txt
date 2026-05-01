@@ -1,4 +1,0 @@
-google-adk>=1.28,<2
-mcp>=1.27,<2
-pydantic-settings>=2.7,<3
-pygame>=2.6,<3

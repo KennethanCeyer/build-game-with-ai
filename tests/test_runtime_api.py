@@ -5,13 +5,11 @@ from typing import Any
 from fastapi.testclient import TestClient
 from google.adk.agents import LlmAgent, LoopAgent
 
-from agentic_game_demo import agent_setup
-from agentic_game_engine.game import game_observation
-from agentic_game_engine.game.agent import root_agent
-from agentic_game_engine import mcp_server
-from agentic_game_engine.game import runtime_api
-from agentic_game_engine.game.adk_controller import _select_model
-from agentic_game_engine.game.simulation import create_default_simulator
+from game_agent import agent
+from game_agent import mcp_server
+from engine.game import game_observation
+from engine.game import runtime_api
+from engine.game.simulation import create_default_simulator
 
 
 def test_console_delegates_to_real_adk_controller(monkeypatch: Any) -> None:
@@ -209,18 +207,11 @@ def test_mcp_server_does_not_fallback_to_private_local_simulator(monkeypatch: An
     assert result["state"] == {}
 
 
-def test_adk_root_agent_is_loop_agent_with_mcp_tool_controller() -> None:
-    assert isinstance(root_agent, LoopAgent)
-    assert root_agent.name == "agentic_game_loop"
-    # In handson mode, sub_agents might be empty initially.
-    if root_agent.sub_agents:
-        controller = root_agent.sub_agents[0]
-        assert isinstance(controller, LlmAgent)
-        assert controller.name == "agentic_game_controller"
 
 
-def test_hands_on_agent_setup_builds_loop_agent_with_controller_and_mcp() -> None:
-    loop_agent = agent_setup.build_loop_agent(model="gemini-3-flash-preview")
+
+def test_hands_on_agent_builds_loop_agent_with_controller_and_mcp() -> None:
+    loop_agent = agent.build_loop_agent(model="gemini-3-flash-preview")
 
     assert isinstance(loop_agent, LoopAgent)
     assert loop_agent.name == "agentic_game_loop"
@@ -235,15 +226,15 @@ def test_hands_on_agent_setup_builds_loop_agent_with_controller_and_mcp() -> Non
 
 
 def test_model_selection_matches_latency_and_reasoning_needs() -> None:
-    assert _select_model("현재 상태만 빠르게 알려줘", "data:image/png;base64,AA==") == (
+    assert agent.select_model_profile("현재 상태만 빠르게 알려줘", "data:image/png;base64,AA==").model == (
         "gemini-3.1-flash-lite-preview"
     )
-    assert _select_model("간단한 설명만 해줘", None) == ("gemini-3-flash-preview")
+    assert agent.select_model_profile("간단한 설명만 해줘", None).model == ("gemini-3-flash-preview")
     assert (
-        _select_model("퍼즐을 관찰해서 입력 버퍼만으로 풀어봐", "data:image/png;base64,AA==")
+        agent.select_model_profile("퍼즐을 관찰해서 입력 버퍼만으로 풀어봐", "data:image/png;base64,AA==").model
         == "gemini-3-flash-preview"
     )
-    assert _select_model("미로를 입력만으로 탈출하고 계획을 보여줘", None) == (
+    assert agent.select_model_profile("미로를 입력만으로 탈출하고 계획을 보여줘", None).model == (
         "gemini-3.1-pro-preview"
     )
 

@@ -7,8 +7,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_handson_agent_setup_exists_and_is_learner_focused() -> None:
-    path = ROOT / "handson/agentic_game_demo/agent_setup.py"
+def test_handson_agent_exists_and_is_learner_focused() -> None:
+    path = ROOT / "handson/game_agent/agent.py"
     assert path.exists()
     text = path.read_text(encoding="utf-8")
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from agentic_game_engine.game.contracts import Gait, ScenarioStatus
-from agentic_game_engine.game.simulation import (
+from engine.game.contracts import Gait, ScenarioStatus
+from engine.game.simulation import (
     MAZE_CELL_SIZE,
     SIMON_PADS,
     WORLD_X_LIMIT,
