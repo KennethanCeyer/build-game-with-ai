@@ -9,38 +9,35 @@ _MAZE_BOUNDS_Z = (-9.2, 1.0)
 
 
 def agent_visible_state(state: dict[str, Any]) -> dict[str, Any]:
-    """전체 런타임 상태를 ADK 도구가 노출할 수 있는 간결한 상태로 변환합니다.
+    """런타임 전체 상태를 ADK 도구 노출용 간결 상태로 변환.
 
-    브라우저 렌더링에는 정확한 좌표와 장애물 데이터, 이벤트 페이로드가 필요하지만, 에이전트에게는 이 모든 데이터가 필요하지 않습니다. 이 함수는 정확한 좌표나 퍼즐 정답, 퀘스트 내부 플래그 등을 의도적으로 제외하고 플레이테스트에 유용한 UI 스타일의 요약 정보만을 제공합니다.
+    정확한 좌표, 퍼즐 정답, 퀘스트 내부 플래그 등 불필요 정보 제외.
+    플레이테스트 유효 요약 정보 제공.
     """
 
     player = _player_actor(state)
     nearby = _nearby_interaction(state, player)
+    
+    # 이벤트를 최신순 정렬 후 요약 제공
+    raw_events = state.get("events", [])
+    sorted_events = sorted(
+        raw_events, 
+        key=lambda e: float(e.get("timestamp", 0)), 
+        reverse=True
+    )
+    
     visible_events: list[dict[str, Any]] = []
-    for event in state.get("events", []):
+    for event in sorted_events[:10]: # 상위 10개로 축소
         if not isinstance(event, dict):
             continue
         visible_events.append(_visible_event(event))
+
     return {
         "scenario_id": state.get("scenario_id"),
         "display_name": state.get("display_name"),
+        "current_time": state.get("current_time", 0),
         "tick": state.get("tick"),
         "status": state.get("status"),
-        "observation_policy": (
-            "가장 중요한 판단 근거는 첨부된 스크린샷입니다. 이 상태 데이터에는 정확한 장애물 기하 구조나 "
-            "숨겨진 경로, 퍼즐 순서, 퀘스트 아이템 내부 플래그가 포함되어 있지 않습니다. 다만 미니맵이나 "
-            "디버그 HUD처럼 대략적인 좌표와 주변 통행 가능 여부는 포함될 수 있습니다."
-        ),
-        "controls": ["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "Space", "KeyE"],
-        "tool_contract": {
-            "controllable_actor_id": "rhea",
-            "movement_tool": "apply_input_buffer",
-            "camera_tool": "adjust_camera_view",
-            "notes": [
-                "도구에서 actor_id를 요구할 경우 'rhea'를 사용하세요.",
-                "움직임이 잘 보이도록 도구 호출 한 번에 2~6개의 짧은 프레임을 사용하는 것이 좋습니다.",
-            ],
-        },
         "player": {
             "id": player.get("id"),
             "name": player.get("name"),
@@ -54,28 +51,11 @@ def agent_visible_state(state: dict[str, Any]) -> dict[str, Any]:
         "npcs": _npc_summaries(state, player),
         "inventory": list(state.get("inventory", [])),
         "navigation_observation": {
-            "frame": (
-                "나침반 스타일로 요약된 플레이어 가시 정보입니다. 정확한 좌표나 경로 대신, "
-                "현재 위치에서 보이는 상호작용 대상들의 방향 정보를 제공합니다."
-            ),
-            "movement_hint": (
-                "캐릭터 이동(WASD)은 현재 카메라 시점을 기준으로 결정됩니다. "
-                "W키를 누르면 카메라가 바라보는 방향으로 이동하며, 캐릭터는 즉시 해당 방향으로 회전합니다. "
-                "게임 월드의 절대 좌표계(N, S, E, W)와 카메라 기준 좌표계가 다를 수 있음을 유의하세요. "
-                "예를 들어 카메라를 회전시킨 상태에서는 W키가 월드 기준 남쪽을 향할 수도 있습니다. "
-                "필요하다면 adjust_camera_view 도구로 시점을 조정하여 공간 관계를 파악하세요. "
-                "camera_yaw_degrees는 이동 시 기준이 된 카메라의 Yaw 각도입니다."
-            ),
             "visible_landmarks": _relative_landmarks(state, player),
             "local_clearance": _local_clearance(state, player),
             "far_clearance": _far_clearance(state, player),
             "maze_corridors": _maze_open_corridors(state, player),
         },
-        "objective_context": [
-            "NPC 퀘스트는 대화 박스와 인벤토리로 추론한다.",
-            "미로 탈출은 미로 시작 라벨을 먼저 통과한 뒤 출구 라벨로 나가야 인정된다.",
-            "이 정보는 플레이어 UI에 보이는 일반 상태이며 좌표/정답/숨은 경로는 포함하지 않는다.",
-        ],
         "goals": list(state.get("goals", [])),
         "flags": _visible_completion_flags(state.get("flags", {})),
         "events": visible_events,
@@ -355,7 +335,12 @@ def _visible_event(event: dict[str, Any]) -> dict[str, Any]:
     퍼즐 재생 순서나 대화 내용은 화면이나 소리를 통해 플레이어가 직접 경험하는 정보이므로
     그대로 유지합니다. 내부 플래그나 퀘스트 아이템의 숨겨진 데이터 등 엔진 내부 정보는 제외됩니다.
     """
-    base = {key: value for key, value in event.items() if key != "data"}
+    base = {
+        "tick": event.get("tick"),
+        "timestamp": event.get("timestamp"),
+        "message": event.get("message"),
+        "severity": event.get("severity"),
+    }
     data = event.get("data")
     if not isinstance(data, dict):
         return base

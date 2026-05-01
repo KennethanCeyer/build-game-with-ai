@@ -21,31 +21,31 @@ logging.getLogger("fastmcp").setLevel(logging.WARNING)
 mcp = FastMCP(
     "게임 에이전트 런타임",
     instructions=(
-        "3D 인디 게임 QA용 도구 모음입니다. 에이전트는 게임 상태를 관찰하고 "
-        "WASD, Shift, Space, E 키 입력을 조합해 캐릭터를 조작해야 합니다. "
-        "순간이동이나 직접적인 상태 수정은 불가능하며 실제 플레이어와 동일한 조건에서 기동합니다."
+        "3D 인디 게임 QA용 도구 모음. 게임 상태 관측 및 "
+        "WASD, Shift, Space, E 키 입력을 조합해 캐릭터 조작. "
+        "직접적인 상태 수정 불가 및 실제 플레이어와 동일 조건 기동."
     ),
     json_response=True,
 )
 
 # 에이전트의 작업 기억을 보관하기 위한 전역 변수
-_agent_working_memory: str = "미로 탈출 및 NPC 퀘스트 수행 중. 아직 기록된 세부 기억 없음."
+_agent_working_memory: str = "미로 탈출 및 NPC 퀘스트 수행 중. 기록된 세부 기억 없음."
 
 
 @mcp.tool()
 def save_memory(insight: str) -> str:
-    """에이전트의 현재 판단, 이동 경로, 발견한 사실 등 중요한 정보를 작업 기억에 저장합니다.
-    다음에 load_memory를 호출하여 이 정보를 다시 확인할 수 있습니다.
+    """판단, 이동 경로, 발견 사실 등 중요 정보를 작업 기억에 저장.
+    load_memory를 통해 정보 확인 가능.
     """
     global _agent_working_memory
     _agent_working_memory = insight
-    return "기억이 성공적으로 저장되었습니다."
+    return "기억 저장 성공."
 
 
 @mcp.tool()
 def load_memory() -> str:
-    """이전에 save_memory로 저장했던 작업 기억을 불러옵니다.
-    본인의 이전 계획이나 실패했던 경로를 복기할 때 사용하세요.
+    """저장된 작업 기억 불러오기.
+    이전 계획이나 실패 경로 복기 시 사용.
     """
     global _agent_working_memory
     return f"보관된 기억: {_agent_working_memory}"
@@ -53,10 +53,8 @@ def load_memory() -> str:
 
 @mcp.tool()
 def diagnose_engine_state() -> dict[str, Any]:
-    """게임 엔진의 내부 진단 정보를 조회합니다.
-
-    보이지 않는 이벤트 트리거 상태, 물리 엔진의 경고, 퀘스트 논리 구조 등
-    전략 수립에 필요한 기술적 데이터를 제공합니다.
+    """게임 엔진 내부 진단 정보 조회.
+    이벤트 트리거 상태, 물리 엔진 경고, 퀘스트 논리 구조 등 기술 데이터 제공.
     """
     runtime_diag = _runtime_get("/api/diagnostics")
     if runtime_diag is not None:
@@ -67,18 +65,18 @@ def diagnose_engine_state() -> dict[str, Any]:
         }
     return {
         "ok": False,
-        "message": "진단 정보를 가져올 수 없습니다. 엔진 통신 상태를 확인하세요."
+        "message": "진단 정보 획득 실패. 엔진 통신 상태 확인 필요."
     }
 
 
 @mcp.tool()
-def inspect_game_state() -> types.TextContent | list[types.TextContent | types.ImageContent]:
-    """현재 게임 월드의 상태 정보를 조회합니다.
-    캐릭터 위치, 주변 장애물, 퀘스트 진행 상황 및 실시간 화면 스크린샷을 포함합니다.
+def inspect_game_state(include_screenshot: bool = True) -> types.TextContent | list[types.TextContent | types.ImageContent]:
+    """현재 게임 월드 상태 정보 조회.
+    캐릭터 위치, 주변 장애물, 퀘스트 진행 상황 포함.
+    시각 확인 필요 시에만 include_screenshot=True 사용 (TPM 절약).
     """
     runtime_state = _runtime_get("/api/state")
     if runtime_state is not None:
-        # 모든 가시적 랜드마크에 대한 범용 내비게이션 정보 생성
         state_data = runtime_state.get("state", {})
         landmarks = state_data.get("visible_landmarks", [])
         nav_guides = []
@@ -89,55 +87,44 @@ def inspect_game_state() -> types.TextContent | list[types.TextContent | types.I
             rel_z = lm.get("relative_z", 0)
             
             direction = []
-            if rel_z < -1:
-                direction.append("North")
-            elif rel_z > 1:
-                direction.append("South")
-            if rel_x < -1:
-                direction.append("West")
-            elif rel_x > 1:
-                direction.append("East")
-            dir_str = "-".join(direction) or "중심"
-            nav_guides.append(f"- {name}: {dir_str} 방향 ({dist})")
+            if rel_z < -1: direction.append("North")
+            elif rel_z > 1: direction.append("South")
+            if rel_x < -1: direction.append("West")
+            elif rel_x > 1: direction.append("East")
+            nav_guides.append(f"- {name}: {"-".join(direction) or "center"} ({dist})")
         
-        guide_text = "\n".join(nav_guides) if nav_guides else "현재 시야에 주요 랜드마크가 없습니다."
+        guide_text = "\n".join(nav_guides) if nav_guides else "No landmarks visible."
 
         state_json = json.dumps(
-            {"ok": True, "state": agent_visible_state(state_data), "source": "runtime_http"},
-            ensure_ascii=False,
-            indent=2
+            {"ok": True, "state": agent_visible_state(state_data)},
+            ensure_ascii=False
         )
         content: list[types.TextContent | types.ImageContent] = [
             types.TextContent(
                 type="text",
-                text=(
-                    f"현재 상태 JSON:\n{state_json}\n\n"
-                    f"[주변 주요 대상 정보]\n{guide_text}"
-                )
+                text=f"State JSON: {state_json}\nLandmarks: {guide_text}"
             )
         ]
         
-        screenshot_url = runtime_state.get("screenshot")
-        if screenshot_url and "," in screenshot_url:
-            try:
-                fmt, b64_data = screenshot_url.split(",", 1)
-                mime = fmt.split(":")[1].split(";")[0]
-                content.append(types.ImageContent(
-                    type="image",
-                    data=b64_data,
-                    mimeType=mime
-                ))
-            except Exception:
-                pass
+        if include_screenshot:
+            screenshot_url = runtime_state.get("screenshot")
+            if screenshot_url and "," in screenshot_url:
+                try:
+                    fmt, b64_data = screenshot_url.split(",", 1)
+                    mime = fmt.split(":")[1].split(";")[0]
+                    content.append(types.ImageContent(
+                        type="image",
+                        data=b64_data,
+                        mimeType=mime
+                    ))
+                except Exception:
+                    pass
                 
         return content
 
     return types.TextContent(
         type="text",
-        text=json.dumps({
-            "ok": False,
-            "message": "게임 런타임에 접속할 수 없습니다. 먼저 게임 서버를 실행하세요.",
-        }, ensure_ascii=False)
+        text=json.dumps({"ok": False, "msg": "Engine connection failed."}, ensure_ascii=False)
     )
 
 
@@ -148,25 +135,12 @@ def apply_input_buffer(
     camera_yaw_degrees: float = 0.0,
 ) -> dict[str, Any]:
     """일련의 입력 프레임(WASD, Shift, Space, E)을 전송하여 캐릭터를 조작합니다.
-    
     [중요] 캐릭터 이동은 카메라 시점을 기준으로 결정됩니다.
-    - W키: 현재 카메라가 바라보는 정면 방향으로 이동 및 회전
-    - S/A/D키: 각각 카메라 기준 후방/좌측/우측으로 이동
-    이동 시에는 inspect_game_state에서 확인한 현재 카메라의 yaw 각도(camera_yaw_degrees)를 
-    함께 전달해야 의도한 방향으로 정확히 움직입니다.
-    
-    복합적인 경로 계획을 위해 여러 개의 프레임을 한 번의 호출에 포함시키는 시퀀스(Sequence) 방식을 강력히 권장합니다.
-    예를 들어 [{"keys": ["KeyW"], "duration_ms": 2000}, {"keys": ["KeyW", "KeyD"], "duration_ms": 1000}]와 같이
-    [전진 2초, 우회전 1초]를 하나의 리스트에 담아 호출하면 에이전트의 효율성이 극대화됩니다.
     """
     normalized_actor_id = _normalize_actor_id(actor_id)
     if normalized_actor_id != "rhea":
-        return {
-            "ok": False,
-            "message": "플레이어 캐릭터 'rhea'만 조작할 수 있습니다.",
-            "state": {},
-            "degraded": True,
-        }
+        return {"ok": False, "msg": "Only 'rhea' can be controlled."}
+
     runtime_result = _runtime_post(
         "/api/input-buffer",
         {
@@ -176,17 +150,12 @@ def apply_input_buffer(
         },
     )
     if runtime_result is not None:
-        runtime_result["state"] = agent_visible_state(runtime_result.get("state", {}))
-        runtime_result["source"] = "runtime_http"
-        return runtime_result
+        return {
+            "ok": True,
+            "state": agent_visible_state(runtime_result.get("state", {}))
+        }
 
-    return {
-        "ok": False,
-        "message": "게임 런타임에 접속할 수 없습니다. 입력을 전달하지 못했습니다.",
-        "state": {},
-        "source": "runtime_http_unavailable",
-        "degraded": True,
-    }
+    return {"ok": False, "msg": "Engine connection failed."}
 
 
 @mcp.tool()
