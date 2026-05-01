@@ -3,7 +3,7 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "agentic-game-demo"
+name = "build-game-with-ai"
 version = "0.1.0"
 description = "Hands-on ADK + A2A + indie game QA demo with a small 3D simulation runtime."
 requires-python = ">=3.11"
@@ -25,7 +25,7 @@ dev = [
 ]
 
 [project.scripts]
-agentic-game-demo = "agentic_game_demo.runtime_api:main"
+build-game-with-ai = "agentic_game_demo.runtime_api:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

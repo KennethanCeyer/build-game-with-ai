@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,18 +24,19 @@ class AgentModelProfile:
 DIRECTOR_MODEL = AgentModelProfile(
     agent_name="director",
     model="gemini-3-flash-preview",
-    role="Fast workshop-facing planner and tool caller.",
+    role="빠른 워크숍용 기획 및 도구 호출 담당 에이전트",
 )
 QA_MODEL = AgentModelProfile(
     agent_name="qa_automation",
     model="gemini-3.1-pro-preview",
-    role="Careful multi-step QA reasoning.",
+    role="세밀하고 단계적인 QA 추론 담당 에이전트",
 )
 VISION_MODEL = AgentModelProfile(
     agent_name="vision_verifier",
     model="gemini-3.1-flash-lite-preview",
-    role="Fast screenshot confirmation.",
+    role="빠른 스크린샷 검증 담당 에이전트",
 )
+
 
 def workshop_model_profiles() -> list[dict[str, str]]:
     """워크숍 UI에서 표시할 모델 프로필 목록을 반환합니다."""
@@ -50,7 +50,7 @@ def workshop_model_profiles() -> list[dict[str, str]]:
 DEFAULT_MODEL = DIRECTOR_MODEL.model
 
 CONTROLLER_INSTRUCTION = """
-You control the player character in a live 3D game QA scene.
+당신은 3D 게임 QA 환경에서 플레이어 캐릭터를 조작하는 에이전트입니다.
 ... (TODO: 에이전트의 페르소나와 행동 지침을 작성하세요) ...
 """.strip()
 
@@ -92,7 +92,7 @@ def build_user_content(user_message: str, screenshot_data_url: str | None) -> ty
     TODO(실습-7): 사용자 메시지와 스크린샷(base64)을 Gemini Content 형식으로 변환하세요.
     """
     parts: list[types.Part] = [types.Part(text=user_message)]
-    # Hint: screenshot_data_url에서 데이터를 추출하고 base64.b64decode를 사용하세요.
+    # 힌트: screenshot_data_url에서 데이터를 추출하고 base64.b64decode를 사용하세요.
     return types.Content(role="user", parts=parts)
 
 

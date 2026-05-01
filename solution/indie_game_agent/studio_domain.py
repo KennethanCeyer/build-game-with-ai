@@ -7,11 +7,31 @@ from typing import Any, Literal
 from pydantic import BaseModel
 
 
-ROLE_LIBRARY = {
-    "chaser": {"speed": 160, "hp": 3, "threat": "pins the player in motion", "cue": "bright face and pointed silhouette"},
-    "turret": {"speed": 70, "hp": 4, "threat": "locks space with ranged fire", "cue": "anchored body and pre-shot flash"},
-    "support": {"speed": 110, "hp": 2, "threat": "amplifies nearby enemies", "cue": "aura ring and soft idle pose"},
-    "bruiser": {"speed": 95, "hp": 6, "threat": "slow but punishing contact damage", "cue": "large shadow and slow windup"},
+ROLE_LIBRARY: dict[str, dict[str, Any]] = {
+    "chaser": {
+        "speed": 160,
+        "hp": 3,
+        "threat": "pins the player in motion",
+        "cue": "bright face and pointed silhouette",
+    },
+    "turret": {
+        "speed": 70,
+        "hp": 4,
+        "threat": "locks space with ranged fire",
+        "cue": "anchored body and pre-shot flash",
+    },
+    "support": {
+        "speed": 110,
+        "hp": 2,
+        "threat": "amplifies nearby enemies",
+        "cue": "aura ring and soft idle pose",
+    },
+    "bruiser": {
+        "speed": 95,
+        "hp": 6,
+        "threat": "slow but punishing contact damage",
+        "cue": "large shadow and slow windup",
+    },
 }
 
 FOCUS_ROLE_ORDER = {
@@ -158,10 +178,30 @@ def plan_vertical_slice_payload(
 
     cut_count = 4 if team_size <= 2 else 3
     milestones = [
-        Milestone(week=1, focus="lock pillars and input feel", exit_criteria=["one room playable", "one enemy placeholder", "one reward loop"]),
-        Milestone(week=max(2, scope_weeks // 3), focus="make combat readable", exit_criteria=["three enemy verbs", "clear hit feedback", "basic fail state"]),
-        Milestone(week=max(3, (scope_weeks * 2) // 3), focus="connect progression", exit_criteria=["one build choice", "one pickup economy", "one short session loop"]),
-        Milestone(week=scope_weeks, focus="ship the slice", exit_criteria=["playtest notes triaged", "performance checked", "store capture or deck ready"]),
+        Milestone(
+            week=1,
+            focus="lock pillars and input feel",
+            exit_criteria=["one room playable", "one enemy placeholder", "one reward loop"],
+        ),
+        Milestone(
+            week=max(2, scope_weeks // 3),
+            focus="make combat readable",
+            exit_criteria=["three enemy verbs", "clear hit feedback", "basic fail state"],
+        ),
+        Milestone(
+            week=max(3, (scope_weeks * 2) // 3),
+            focus="connect progression",
+            exit_criteria=["one build choice", "one pickup economy", "one short session loop"],
+        ),
+        Milestone(
+            week=scope_weeks,
+            focus="ship the slice",
+            exit_criteria=[
+                "playtest notes triaged",
+                "performance checked",
+                "store capture or deck ready",
+            ],
+        ),
     ]
 
     return {
@@ -207,10 +247,10 @@ def design_enemy_roster_payload(
         variant = EnemyArchetype(
             name=f"{theme.title()} {role.title()} {index + 1}",
             role=role,
-            move_speed=base["speed"] + index * 6,
-            max_hp=base["hp"] + (1 if role == "bruiser" and index > 0 else 0),
-            threat=base["threat"],
-            readability_cue=base["cue"],
+            move_speed=int(base["speed"]) + index * 6,
+            max_hp=int(base["hp"]) + (1 if role == "bruiser" and index > 0 else 0),
+            threat=str(base["threat"]),
+            readability_cue=str(base["cue"]),
         )
         roster.append(variant.model_dump(mode="json"))
 
@@ -232,7 +272,9 @@ def balance_combat_wave_payload(
     target_enemy_hp_budget = max(int(player_dps * target_duration_sec * 0.14 * multiplier), 12)
     baseline_enemy_hp = max(int(round((4.4 + player_hp * 0.45) * multiplier)), 3)
     enemy_count = max(ceil(target_enemy_hp_budget / baseline_enemy_hp), 3)
-    spawn_interval_sec = round(max(0.7, min(2.8, target_duration_sec / max(enemy_count * 1.45, 1))), 2)
+    spawn_interval_sec = round(
+        max(0.7, min(2.8, target_duration_sec / max(enemy_count * 1.45, 1))), 2
+    )
     elite_count = 1 if difficulty != "easy" and enemy_count >= 10 else 0
 
     return {
@@ -288,12 +330,42 @@ def draft_feature_backlog_payload(
 ) -> dict:
     sprint_days = _clamp(sprint_days, 5, 20)
     tasks = [
-        BacklogTask(title=f"Define the player-facing rule for {feature_name}", discipline="design", estimate_days=1, outcome="short ruleset and fail conditions"),
-        BacklogTask(title=f"Implement the gameplay spine for {feature_name}", discipline="engineering", estimate_days=max(2, sprint_days // 4), outcome="working mechanic in playable build"),
-        BacklogTask(title=f"Create readable visuals for {feature_name}", discipline="art", estimate_days=max(1, sprint_days // 5), outcome="final silhouette or placeholder set"),
-        BacklogTask(title=f"Add HUD or feedback hooks for {feature_name}", discipline="ui", estimate_days=1, outcome="player can read the state quickly"),
-        BacklogTask(title=f"Add supporting SFX for {feature_name}", discipline="audio", estimate_days=1, outcome="one-shot and loop cues in place"),
-        BacklogTask(title=f"Write the test pass for {feature_name}", discipline="qa", estimate_days=1, outcome="repro cases and acceptance checklist"),
+        BacklogTask(
+            title=f"Define the player-facing rule for {feature_name}",
+            discipline="design",
+            estimate_days=1,
+            outcome="short ruleset and fail conditions",
+        ),
+        BacklogTask(
+            title=f"Implement the gameplay spine for {feature_name}",
+            discipline="engineering",
+            estimate_days=max(2, sprint_days // 4),
+            outcome="working mechanic in playable build",
+        ),
+        BacklogTask(
+            title=f"Create readable visuals for {feature_name}",
+            discipline="art",
+            estimate_days=max(1, sprint_days // 5),
+            outcome="final silhouette or placeholder set",
+        ),
+        BacklogTask(
+            title=f"Add HUD or feedback hooks for {feature_name}",
+            discipline="ui",
+            estimate_days=1,
+            outcome="player can read the state quickly",
+        ),
+        BacklogTask(
+            title=f"Add supporting SFX for {feature_name}",
+            discipline="audio",
+            estimate_days=1,
+            outcome="one-shot and loop cues in place",
+        ),
+        BacklogTask(
+            title=f"Write the test pass for {feature_name}",
+            discipline="qa",
+            estimate_days=1,
+            outcome="repro cases and acceptance checklist",
+        ),
     ]
 
     return {
@@ -321,9 +393,17 @@ def build_launch_checklist_payload(
 
     checklist = {
         "build": build_track + ["crash reporting verified", "save compatibility checked"],
-        "qa": ["one full clean-room run", "one regression pass on known issues", "controller and keyboard sanity pass"],
+        "qa": [
+            "one full clean-room run",
+            "one regression pass on known issues",
+            "controller and keyboard sanity pass",
+        ],
         "store": store_track,
-        "marketing": ["trailer capture list ready", "patch notes draft ready", "announcement copy reviewed"],
+        "marketing": [
+            "trailer capture list ready",
+            "patch notes draft ready",
+            "announcement copy reviewed",
+        ],
         "localization": [f"{localization_count} language set reviewed for truncation and overflow"],
     }
 
@@ -338,7 +418,9 @@ def build_launch_checklist_payload(
     }
 
 
-def _entries_to_coords(entries: list[dict[str, Any]], include_collected: bool = True) -> set[tuple[int, int]]:
+def _entries_to_coords(
+    entries: list[dict[str, Any]], include_collected: bool = True
+) -> set[tuple[int, int]]:
     coords = set()
     for entry in entries:
         if not include_collected and entry.get("collected", False):
@@ -373,8 +455,11 @@ def _bfs_path(
         current = queue.popleft()
         if current in goals:
             path = [current]
-            while parents[path[-1]] is not None:
-                path.append(parents[path[-1]])
+            while True:
+                parent = parents[path[-1]]
+                if parent is None:
+                    break
+                path.append(parent)
             path.reverse()
             return path
 
@@ -421,9 +506,11 @@ def suggest_safe_route_payload(state: dict[str, Any], step_limit: int = 4) -> di
     start = (int(player["x"]), int(player["y"]))
     exit_pos = (int(state["exit"]["x"]), int(state["exit"]["y"]))
     relic_targets = _entries_to_coords(state["relics"], include_collected=False)
-    blocked = _entries_to_coords(state["walls"]) | _entries_to_coords(state["cover"]) | {
-        (int(sentry["x"]), int(sentry["y"])) for sentry in state["sentries"]
-    }
+    blocked = (
+        _entries_to_coords(state["walls"])
+        | _entries_to_coords(state["cover"])
+        | {(int(sentry["x"]), int(sentry["y"])) for sentry in state["sentries"]}
+    )
     unsafe = _entries_to_coords(state["threat_tiles"])
 
     preview_limit = max(1, min(step_limit, 8))
@@ -433,7 +520,9 @@ def suggest_safe_route_payload(state: dict[str, Any], step_limit: int = 4) -> di
     waypoints: list[str] = []
 
     while remaining_relics:
-        path = _bfs_path(width, height, current, remaining_relics, blocked, unsafe, exit_pos, exit_locked=True)
+        path = _bfs_path(
+            width, height, current, remaining_relics, blocked, unsafe, exit_pos, exit_locked=True
+        )
         if path is None:
             return {
                 "status": "no_safe_route",
@@ -452,7 +541,9 @@ def suggest_safe_route_payload(state: dict[str, Any], step_limit: int = 4) -> di
         remaining_relics.remove(target)
         waypoints.append(f"Collect relic at {target}.")
 
-    path_to_exit = _bfs_path(width, height, current, {exit_pos}, blocked, unsafe, exit_pos, exit_locked=False)
+    path_to_exit = _bfs_path(
+        width, height, current, {exit_pos}, blocked, unsafe, exit_pos, exit_locked=False
+    )
     if path_to_exit is None:
         return {
             "status": "no_safe_route",
@@ -476,7 +567,9 @@ def suggest_safe_route_payload(state: dict[str, Any], step_limit: int = 4) -> di
         "It collects all remaining relics before stepping onto the exit.",
     ]
     if state.get("snapshot_hint"):
-        explanation.append("Because the room is static, you can also verify the route from a screenshot.")
+        explanation.append(
+            "Because the room is static, you can also verify the route from a screenshot."
+        )
 
     return {
         "status": "route_found",

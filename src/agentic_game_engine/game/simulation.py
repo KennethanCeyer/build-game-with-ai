@@ -62,11 +62,9 @@ class CommandResult:
 
 
 class RuntimeSimulator:
-    """Deterministic game runtime used by the agent tools and browser UI.
+    """에이전트 도구와 브라우저 UI에서 사용하는 결정론적 게임 런타임입니다.
 
-    The browser is responsible for interpolation and rendering. This simulator owns the
-    rules: where the actor is, which interaction is valid, and which objective flags
-    are complete. That keeps game logic testable and separate from the 3D code.
+    브라우저는 보간(interpolation)과 렌더링을 담당하며, 이 시뮬레이터는 캐릭터의 위치, 상호작용의 유효성, 목표 달성 여부 등 모든 게임 규칙을 관리합니다. 이를 통해 게임 로직을 3D 시각화 코드와 분리하여 독립적으로 테스트할 수 있습니다.
     """
 
     def __init__(self, state: WorldState) -> None:

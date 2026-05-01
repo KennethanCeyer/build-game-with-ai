@@ -8,7 +8,7 @@ from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
 
 from .logging_utils import get_logger
-from .settings import apply_environment, load_settings
+from .settings import load_settings
 
 
 logger = get_logger("indie_game_agent.agent")

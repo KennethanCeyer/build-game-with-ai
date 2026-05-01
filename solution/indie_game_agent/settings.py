@@ -15,20 +15,20 @@ logger = get_logger("indie_game_agent.settings")
 
 
 class Settings(BaseSettings):
-    google_api_key: str = Field(..., validation_alias="GOOGLE_API_KEY")
+    google_api_key: str = Field(default="", validation_alias="GOOGLE_API_KEY")
 
     model_config = SettingsConfigDict(
+        env_file=str(ENV_FILE) if ENV_FILE.exists() else None,
         extra="ignore",
     )
 
 
 def load_settings() -> Settings:
-    if ENV_FILE.exists():
-        logger.info("Loading settings from %s", ENV_FILE.name)
-        return Settings(_env_file=ENV_FILE)
-
-    logger.info("Loading settings from process environment")
-    return Settings()
+    logger.info("Loading settings")
+    settings = Settings()
+    if not settings.google_api_key:
+        logger.warning("GOOGLE_API_KEY is not set in environment or .env file")
+    return settings
 
 
 def apply_environment(settings: Settings) -> None:

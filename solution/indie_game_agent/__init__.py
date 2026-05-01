@@ -17,8 +17,7 @@ def _sanitize_surrogates(value: Any) -> Any:
         return {_sanitize_surrogates(item) for item in value}
     if isinstance(value, dict):
         return {
-            _sanitize_surrogates(key): _sanitize_surrogates(item)
-            for key, item in value.items()
+            _sanitize_surrogates(key): _sanitize_surrogates(item) for key, item in value.items()
         }
     return value
 
@@ -58,14 +57,14 @@ def _patch_event_json_serialization() -> None:
                 separators=(",", ":") if kwargs.get("indent") is None else None,
             )
 
-    Event.model_dump_json = safe_model_dump_json
-    Event._indie_game_agent_surrogate_patch = True
+    Event.model_dump_json = safe_model_dump_json  # type: ignore
+    setattr(Event, "_indie_game_agent_surrogate_patch", True)
 
 
 _patch_event_json_serialization()
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "root_agent":
         from .agent import root_agent
 

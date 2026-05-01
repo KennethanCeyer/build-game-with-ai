@@ -5,7 +5,6 @@ import sys
 from pathlib import Path
 
 from google.adk.agents import LlmAgent, LoopAgent
-from google.adk.tools import exit_loop
 from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters

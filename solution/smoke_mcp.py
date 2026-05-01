@@ -17,7 +17,9 @@ logger = get_logger("smoke_mcp")
 
 async def _main() -> None:
     if not runtime_available():
-        raise RuntimeError("The local runtime is not responding on udp://127.0.0.1:8765. Start run_game.py first.")
+        raise RuntimeError(
+            "The local runtime is not responding on udp://127.0.0.1:8765. Start run_game.py first."
+        )
 
     server = StdioServerParameters(
         command=sys.executable,
@@ -84,22 +86,59 @@ async def _main() -> None:
             route_result = await session.call_tool("suggest_safe_route", {"step_limit": 4})
             preview_result = await session.call_tool("preview_plan_in_game", {"step_limit": 4})
             solve_result = await session.call_tool("solve_turn_in_game", {"step_limit": 4})
-            snapshot_result = await session.call_tool("export_board_snapshot", {"filename": "smoke_room.png"})
+            snapshot_result = await session.call_tool(
+                "export_board_snapshot", {"filename": "smoke_room.png"}
+            )
             runtime_state = await session.call_tool("inspect_running_game", {})
 
             logger.info("Tools: %s", ", ".join(tool.name for tool in tools.tools))
-            logger.info("Resources: %s", ", ".join(str(resource.uri) for resource in resources.resources))
-            logger.info("Vertical slice sample:\n%s", json.dumps(slice_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Enemy roster sample:\n%s", json.dumps(roster_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Playtest triage sample:\n%s", json.dumps(triage_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Backlog sample:\n%s", json.dumps(backlog_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Launch checklist sample:\n%s", json.dumps(launch_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Room load sample:\n%s", json.dumps(room_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Route suggestion sample:\n%s", json.dumps(route_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Plan preview sample:\n%s", json.dumps(preview_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Applied turn sample:\n%s", json.dumps(solve_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Snapshot sample:\n%s", json.dumps(snapshot_result.model_dump(mode="json"), indent=2, ensure_ascii=True))
-            logger.info("Runtime state sample:\n%s", json.dumps(runtime_state.model_dump(mode="json"), indent=2, ensure_ascii=True))
+            logger.info(
+                "Resources: %s", ", ".join(str(resource.uri) for resource in resources.resources)
+            )
+            logger.info(
+                "Vertical slice sample:\n%s",
+                json.dumps(slice_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Enemy roster sample:\n%s",
+                json.dumps(roster_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Playtest triage sample:\n%s",
+                json.dumps(triage_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Backlog sample:\n%s",
+                json.dumps(backlog_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Launch checklist sample:\n%s",
+                json.dumps(launch_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Room load sample:\n%s",
+                json.dumps(room_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Route suggestion sample:\n%s",
+                json.dumps(route_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Plan preview sample:\n%s",
+                json.dumps(preview_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Applied turn sample:\n%s",
+                json.dumps(solve_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Snapshot sample:\n%s",
+                json.dumps(snapshot_result.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
+            logger.info(
+                "Runtime state sample:\n%s",
+                json.dumps(runtime_state.model_dump(mode="json"), indent=2, ensure_ascii=True),
+            )
 
 
 if __name__ == "__main__":

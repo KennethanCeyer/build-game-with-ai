@@ -156,3 +156,4 @@ cython_debug/
 .benchmarks/
 **/.adk/
 !**/.env.example
+.test/

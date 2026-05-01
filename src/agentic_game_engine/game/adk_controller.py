@@ -38,12 +38,11 @@ def _run_real_adk_turn(
     screenshot_data_url: str | None = None,
     emit: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
-    """Run one real ADK turn against the live browser runtime.
+    """실제 브라우저 런타임에 대해 ADK 루프를 한 번 실행합니다.
 
-    This file intentionally owns only the web-server boundary:
-    model selection, Gemini content construction, ADK runner execution, and
-    streamed browser events. The hands-on Agent/MCP code lives in
-    agent_setup.py.
+    이 파일은 웹 서버 경계 로직만을 담당합니다: 모델 선택, Gemini용 데이터 구성,
+    ADK 러너 실행, 그리고 브라우저로 전송할 이벤트 스트림을 관리합니다.
+    실제 에이전트 구성과 MCP 코드는 agent_setup.py에 위치합니다.
     """
 
     _ensure_google_api_key()
@@ -161,7 +160,6 @@ def _build_runner(model: str) -> tuple[Runner, str]:
     )
 
 
-
 def _ensure_google_api_key() -> None:
     if os.getenv("GOOGLE_API_KEY"):
         return
@@ -176,6 +174,6 @@ def _ensure_google_api_key() -> None:
                 os.environ["GOOGLE_API_KEY"] = value
                 return
     raise RuntimeError(
-        "GOOGLE_API_KEY is required. "
-        "Put it in the workspace root .env file as GOOGLE_API_KEY=..."
+        "GOOGLE_API_KEY가 필요합니다. "
+        "워크스페이스 루트의 .env 파일에 GOOGLE_API_KEY=... 형식으로 입력해 주세요."
     )

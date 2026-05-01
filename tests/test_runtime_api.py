@@ -231,21 +231,18 @@ def test_hands_on_agent_setup_builds_loop_agent_with_controller_and_mcp() -> Non
         assert controller.name == "agentic_game_controller"
         assert isinstance(controller.instruction, str)
         assert "WASD" in controller.instruction
-        assert any(
-            tool.__class__.__name__ == "McpToolset" for tool in controller.tools
-        )
+        assert any(tool.__class__.__name__ == "McpToolset" for tool in controller.tools)
 
 
 def test_model_selection_matches_latency_and_reasoning_needs() -> None:
     assert _select_model("현재 상태만 빠르게 알려줘", "data:image/png;base64,AA==") == (
         "gemini-3.1-flash-lite-preview"
     )
-    assert _select_model("간단한 설명만 해줘", None) == (
-        "gemini-3-flash-preview"
+    assert _select_model("간단한 설명만 해줘", None) == ("gemini-3-flash-preview")
+    assert (
+        _select_model("퍼즐을 관찰해서 입력 버퍼만으로 풀어봐", "data:image/png;base64,AA==")
+        == "gemini-3-flash-preview"
     )
-    assert _select_model(
-        "퍼즐을 관찰해서 입력 버퍼만으로 풀어봐", "data:image/png;base64,AA=="
-    ) == "gemini-3-flash-preview"
     assert _select_model("미로를 입력만으로 탈출하고 계획을 보여줘", None) == (
         "gemini-3.1-pro-preview"
     )

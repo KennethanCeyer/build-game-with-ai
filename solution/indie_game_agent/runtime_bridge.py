@@ -41,6 +41,8 @@ def request_runtime(
             ) from exc
 
     response = json.loads(raw_response.decode("utf-8"))
+    if not isinstance(response, dict):
+        raise RuntimeBridgeError("Invalid JSON response from runtime (not a dictionary).")
     if not response.get("ok", False):
         raise RuntimeBridgeError(response.get("error", "Unknown runtime error"))
 

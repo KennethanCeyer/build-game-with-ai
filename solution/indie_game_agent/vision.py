@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from google import genai
 from google.genai import types
@@ -59,12 +60,13 @@ def analyze_snapshot(
 
     client = genai.Client(api_key=settings.google_api_key)
     visual_prompt = prompt or DEFAULT_VISUAL_PROMPT
+    contents: list[Any] = [
+        types.Part(text=visual_prompt),
+        types.Part.from_bytes(data=image_path.read_bytes(), mime_type="image/png"),
+    ]
     response = client.models.generate_content(
         model=model,
-        contents=[
-            visual_prompt,
-            types.Part.from_bytes(data=image_path.read_bytes(), mime_type="image/png"),
-        ],
+        contents=contents,
     )
 
     logger.info("Visual analysis completed for %s", image_path.name)

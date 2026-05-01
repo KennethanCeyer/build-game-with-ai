@@ -101,21 +101,25 @@ def normalize_model_frames(frames: list[dict[str, Any]]) -> list[dict[str, Any]]
     normalized: list[dict[str, Any]] = []
     allowed = {"KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "Space", "KeyE"}
     mapping = {
-        "W": "KeyW", "A": "KeyA", "S": "KeyS", "D": "KeyD",
-        "E": "KeyE", "Shift": "ShiftLeft", "w": "KeyW", "a": "KeyA",
-        "s": "KeyS", "d": "KeyD", "e": "KeyE"
+        "W": "KeyW",
+        "A": "KeyA",
+        "S": "KeyS",
+        "D": "KeyD",
+        "E": "KeyE",
+        "Shift": "ShiftLeft",
+        "w": "KeyW",
+        "a": "KeyA",
+        "s": "KeyS",
+        "d": "KeyD",
+        "e": "KeyE",
     }
     for frame in frames:
         keys = frame.get("keys")
         if not keys and isinstance(frame.get("keyboard_state"), dict):
-            keys = [
-                key
-                for key, pressed in frame["keyboard_state"].items()
-                if pressed is True
-            ]
+            keys = [key for key, pressed in frame["keyboard_state"].items() if pressed is True]
         if not keys:
             keys = [k for k in (list(mapping.keys()) + list(allowed)) if frame.get(k) is True]
-            
+
         raw_keys = [str(k) for k in keys or []]
         normalized_keys: list[str] = []
         for k in raw_keys:

@@ -38,6 +38,7 @@ VISION_MODEL = AgentModelProfile(
     role="Fast screenshot confirmation for capture-heavy hands-on steps.",
 )
 
+
 def workshop_model_profiles() -> list[dict[str, str]]:
     """워크숍 UI에서 표시할 모델 프로필 목록을 반환합니다."""
     return [
@@ -96,15 +97,39 @@ def select_model_profile(
 ) -> AgentModelProfile:
     """사용자 메시지와 스크린샷 유무에 따라 최적의 모델 프로필을 선택합니다."""
     lowered = user_message.lower()
-    pro_tokens = ["전체", "계획", "복잡", "추론", "trace", "트레이스", "분석", "리포트", "검증", "end-to-end"]
+    pro_tokens = [
+        "전체",
+        "계획",
+        "복잡",
+        "추론",
+        "trace",
+        "트레이스",
+        "분석",
+        "리포트",
+        "검증",
+        "end-to-end",
+    ]
     if any(token in lowered for token in pro_tokens):
         return QA_MODEL
 
-    solve_tokens = ["풀", "탈출", "완료", "진행", "퀘스트", "quest", "npc", "퍼즐", "puzzle", "미로"]
+    solve_tokens = [
+        "풀",
+        "탈출",
+        "완료",
+        "진행",
+        "퀘스트",
+        "quest",
+        "npc",
+        "퍼즐",
+        "puzzle",
+        "미로",
+    ]
     if any(token in lowered for token in solve_tokens):
         return DIRECTOR_MODEL
 
-    if screenshot_data_url and any(token in lowered for token in ["화면", "캡쳐", "관찰", "보고", "status"]):
+    if screenshot_data_url and any(
+        token in lowered for token in ["화면", "캡쳐", "관찰", "보고", "status"]
+    ):
         return VISION_MODEL
 
     return DIRECTOR_MODEL
@@ -121,6 +146,6 @@ def build_user_content(user_message: str, screenshot_data_url: str | None) -> ty
 
 
 def validate_agent_answer(user_message: str, answer: str, state: dict[str, Any]) -> str:
-    """에이전트의 답변을 추가 검증 없이 그대로 반환합니다. 
+    """에이전트의 답변을 추가 검증 없이 그대로 반환합니다.
     성공 여부 판단은 에이전트의 지능과 도구 출력값에 맡깁니다."""
     return answer

@@ -17,8 +17,7 @@ def _sanitize_surrogates(value: Any) -> Any:
         return {_sanitize_surrogates(item) for item in value}
     if isinstance(value, dict):
         return {
-            _sanitize_surrogates(key): _sanitize_surrogates(item)
-            for key, item in value.items()
+            _sanitize_surrogates(key): _sanitize_surrogates(item) for key, item in value.items()
         }
     return value
 

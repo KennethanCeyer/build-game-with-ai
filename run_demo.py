@@ -14,7 +14,7 @@ print(f"--- Starting Agentic Game Demo in [{mode}] mode ---")
 sys.path.insert(0, str(root / "src"))
 sys.path.insert(0, str(root / mode))
 
-from agentic_game_engine.game.runtime_api import main
+from agentic_game_engine.game.runtime_api import main  # noqa: E402
 
 
 if __name__ == "__main__":

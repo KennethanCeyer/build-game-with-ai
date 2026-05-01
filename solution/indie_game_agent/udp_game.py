@@ -160,7 +160,9 @@ class RuntimeGame:
         if self.status == "victory":
             return "Room cleared. Load another preset or reset the room."
         if self.relics_remaining() > 0:
-            return f"Turn-based room. Collect {self.relics_remaining()} relic(s) to unlock the exit."
+            return (
+                f"Turn-based room. Collect {self.relics_remaining()} relic(s) to unlock the exit."
+            )
         return "Turn-based room. Exit is unlocked. Reach the green door."
 
     def _within_bounds(self, x: int, y: int) -> bool:
@@ -206,15 +208,17 @@ class RuntimeGame:
     def load_room(self, room_id: str, announce: bool = True) -> dict[str, Any]:
         preset = ROOM_PRESETS.get(room_id, ROOM_PRESETS["vault_intro"])
         self.current_room_id = room_id if room_id in ROOM_PRESETS else "vault_intro"
-        self.room_name = preset["name"]
-        self.room_objective = preset["objective"]
+        self.room_name = str(preset["name"])
+        self.room_objective = str(preset["objective"])
         self.turn_count = 0
         self.status = "in_progress"
         self.hint_path = []
         self.note_expires_at = 0.0
-        self._parse_grid(preset["grid"])
+        self._parse_grid(list(preset["grid"]))
         self.overlay_note = self._default_note()
-        self.recent_events = [f"Room loaded: {self.room_name}. Nothing moves until you or the agent apply a turn."]
+        self.recent_events = [
+            f"Room loaded: {self.room_name}. Nothing moves until you or the agent apply a turn."
+        ]
 
         if announce:
             self.add_event(f"Loaded preset {self.current_room_id}.")
@@ -416,8 +420,7 @@ class RuntimeGame:
             "walls": [{"x": x, "y": y} for x, y in sorted(self.walls)],
             "cover": [{"x": x, "y": y} for x, y in sorted(self.cover)],
             "sentries": [
-                sentry.as_dict(self.sentry_threat_tiles(sentry))
-                for sentry in self.sentries
+                sentry.as_dict(self.sentry_threat_tiles(sentry)) for sentry in self.sentries
             ],
             "threat_tiles": [{"x": x, "y": y} for x, y in threat_tiles],
             "available_moves": self.available_moves(),
@@ -497,7 +500,9 @@ class RuntimeGame:
         base_b = (28, 39, 63)
         tint = base_a if (x + y) % 2 == 0 else base_b
         tile_surface.fill((*tint, 255))
-        pygame.draw.rect(tile_surface, (48, 65, 98, 120), (8, 8, rect[2] - 16, rect[3] - 16), 1, border_radius=10)
+        pygame.draw.rect(
+            tile_surface, (48, 65, 98, 120), (8, 8, rect[2] - 16, rect[3] - 16), 1, border_radius=10
+        )
         pygame.draw.line(tile_surface, (62, 82, 118, 70), (10, rect[3] - 14), (rect[2] - 10, 14), 1)
         self.screen.blit(tile_surface, rect[:2])
 
@@ -505,10 +510,16 @@ class RuntimeGame:
         pygame = self.pygame
         tile_surface = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
         pygame.draw.rect(tile_surface, (64, 74, 98), (0, 0, rect[2], rect[3]), border_radius=12)
-        pygame.draw.rect(tile_surface, (94, 108, 138), (5, 5, rect[2] - 10, rect[3] - 10), border_radius=10)
-        pygame.draw.rect(tile_surface, (42, 52, 74), (9, 9, rect[2] - 18, rect[3] - 18), border_radius=8)
+        pygame.draw.rect(
+            tile_surface, (94, 108, 138), (5, 5, rect[2] - 10, rect[3] - 10), border_radius=10
+        )
+        pygame.draw.rect(
+            tile_surface, (42, 52, 74), (9, 9, rect[2] - 18, rect[3] - 18), border_radius=8
+        )
         pygame.draw.line(tile_surface, (122, 140, 176), (12, 16), (rect[2] - 14, 16), 2)
-        pygame.draw.line(tile_surface, (32, 40, 59), (12, rect[3] - 14), (rect[2] - 12, rect[3] - 14), 2)
+        pygame.draw.line(
+            tile_surface, (32, 40, 59), (12, rect[3] - 14), (rect[2] - 12, rect[3] - 14), 2
+        )
         self.screen.blit(tile_surface, rect[:2])
 
     def _draw_cover_tile(self, rect: tuple[int, int, int, int]) -> None:
@@ -525,9 +536,13 @@ class RuntimeGame:
         pygame = self.pygame
         overlay = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
         overlay.fill((245, 78, 78, 96))
-        pygame.draw.rect(overlay, (255, 186, 186, 130), (3, 3, rect[2] - 6, rect[3] - 6), 2, border_radius=10)
+        pygame.draw.rect(
+            overlay, (255, 186, 186, 130), (3, 3, rect[2] - 6, rect[3] - 6), 2, border_radius=10
+        )
         for stripe_y in range(-rect[3] // 2, rect[3], 14):
-            pygame.draw.line(overlay, (255, 214, 214, 70), (0, stripe_y), (rect[2], stripe_y + rect[2]), 2)
+            pygame.draw.line(
+                overlay, (255, 214, 214, 70), (0, stripe_y), (rect[2], stripe_y + rect[2]), 2
+            )
         if sentries:
             arrow = FACING_SYMBOLS[sentries[0].facing].upper()
             label = self.small_font.render(arrow, True, (255, 238, 238))
@@ -543,7 +558,9 @@ class RuntimeGame:
         pygame = self.pygame
         overlay = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
         overlay.fill((71, 199, 255, 68 if also_threatened else 92))
-        pygame.draw.rect(overlay, (184, 245, 255, 180), (4, 4, rect[2] - 8, rect[3] - 8), 2, border_radius=10)
+        pygame.draw.rect(
+            overlay, (184, 245, 255, 180), (4, 4, rect[2] - 8, rect[3] - 8), 2, border_radius=10
+        )
         diamond = [
             (rect[2] // 2, 9),
             (rect[2] - 9, rect[3] // 2),
@@ -599,10 +616,17 @@ class RuntimeGame:
         frame_rect = (rect[0] + 9, rect[1] + 8, rect[2] - 18, rect[3] - 14)
         exit_color = (69, 189, 118) if not self.exit_locked() else (94, 109, 128)
         glow = pygame.Surface((rect[2], rect[3]), pygame.SRCALPHA)
-        pygame.draw.rect(glow, (*exit_color, 45), (8, 8, rect[2] - 16, rect[3] - 16), border_radius=12)
+        pygame.draw.rect(
+            glow, (*exit_color, 45), (8, 8, rect[2] - 16, rect[3] - 16), border_radius=12
+        )
         self.screen.blit(glow, rect[:2])
         pygame.draw.rect(self.screen, (221, 241, 226), frame_rect, 3, border_radius=10)
-        pygame.draw.rect(self.screen, exit_color, (frame_rect[0] + 4, frame_rect[1] + 4, frame_rect[2] - 8, frame_rect[3] - 8), border_radius=8)
+        pygame.draw.rect(
+            self.screen,
+            exit_color,
+            (frame_rect[0] + 4, frame_rect[1] + 4, frame_rect[2] - 8, frame_rect[3] - 8),
+            border_radius=8,
+        )
         glyph = "LOCK" if self.exit_locked() else "EXIT"
         glyph_surface = self.small_font.render(glyph, True, (243, 250, 244))
         glyph_rect = glyph_surface.get_rect(center=(rect[0] + rect[2] // 2, rect[1] + rect[3] // 2))
@@ -632,7 +656,13 @@ class RuntimeGame:
             color = (8, 12, 20) if (band // 64) % 2 == 0 else (11, 16, 28)
             pygame.draw.rect(self.screen, color, (0, band, self.width, 64))
         pygame.draw.rect(self.screen, (15, 24, 39), (0, 0, self.play_width, self.height))
-        pygame.draw.rect(self.screen, (34, 48, 78), (18, 24, self.play_width - 36, self.grid_size * self.cell_size + 16), 3, border_radius=18)
+        pygame.draw.rect(
+            self.screen,
+            (34, 48, 78),
+            (18, 24, self.play_width - 36, self.grid_size * self.cell_size + 16),
+            3,
+            border_radius=18,
+        )
 
         for y in range(self.grid_size):
             for x in range(self.grid_size):
@@ -643,7 +673,11 @@ class RuntimeGame:
                 elif (x, y) in self.cover:
                     self._draw_cover_tile(rect)
                 if (x, y) in threat_tiles and (x, y) not in self.walls and (x, y) not in self.cover:
-                    tile_sentries = [sentry for sentry in self.sentries if (x, y) in self.sentry_threat_tiles(sentry)]
+                    tile_sentries = [
+                        sentry
+                        for sentry in self.sentries
+                        if (x, y) in self.sentry_threat_tiles(sentry)
+                    ]
                     self._draw_threat_overlay(rect, tile_sentries)
                 if (x, y) in hint_tiles:
                     step_number = None
@@ -689,7 +723,11 @@ class RuntimeGame:
         y = 22
         for line in lines:
             font = self.font if len(line) <= 42 else self.small_font
-            color = (236, 240, 247) if line not in {"Objective:", "Recent events:", "Safe moves:"} else (152, 208, 255)
+            color = (
+                (236, 240, 247)
+                if line not in {"Objective:", "Recent events:", "Safe moves:"}
+                else (152, 208, 255)
+            )
             surface = font.render(line, True, color)
             self.screen.blit(surface, (panel_x + 18, y))
             y += 24 if font is self.font else 20
