@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from game_agent.agent import QA_MODEL
+from game_agent.agent import STRATEGY_AGENT
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,7 @@ def qa_agent_card(base_url: str = "http://127.0.0.1:8787") -> dict[str, Any]:
             "Runs game QA by observing state and sending the same input buffer available "
             "to a player. It does not teleport actors or mutate flags directly."
         ),
-        model=QA_MODEL.model,
+        model=STRATEGY_AGENT.model,
         url=f"{base_url}/a2a/qa",
         capabilities=[
             AgentCapability(

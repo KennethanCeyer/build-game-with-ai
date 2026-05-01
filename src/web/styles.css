@@ -370,6 +370,55 @@ kbd {
   height: 28px;
 }
 
+.console-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* Maximized Console Mode */
+body.console-maximized #console {
+  width: 100vw;
+  height: 100vh;
+  left: 0;
+  bottom: 0;
+  transform: none;
+  border: 0;
+  border-radius: 0;
+  z-index: 1000;
+}
+
+body.console-maximized #consoleLog {
+  height: calc(100vh - 160px);
+}
+
+body.console-maximized #scene {
+  position: fixed !important;
+  right: 24px !important;
+  bottom: 82px !important;
+  width: 340px !important;
+  height: 190px !important;
+  z-index: 2000 !important;
+  border-radius: 14px;
+  border: 2px solid rgba(108, 194, 255, 0.5);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+  pointer-events: auto;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  display: block !important;
+  overflow: hidden !important;
+}
+
+body.console-maximized #scene canvas {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit;
+}
+
+body.console-maximized #hud,
+body.console-maximized #inventoryPanel,
+body.console-maximized #dialogueBox {
+  display: none !important;
+}
+
 .command-palette {
   display: flex;
   flex-wrap: wrap;
@@ -454,18 +503,37 @@ kbd {
   content: "";
   position: absolute;
   inset: auto 0 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #8fe3b0, transparent);
-  animation: thinking-scan 1.25s linear infinite;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #8fe3b0, #5bdaa3, #8fe3b0, transparent);
+  background-size: 200% 100%;
+  animation: thinking-scan 2s ease-in-out infinite;
 }
 
 @keyframes thinking-scan {
-  from {
-    transform: translateX(-100%);
+  0% {
+    background-position: 200% 0;
   }
-  to {
-    transform: translateX(100%);
+  100% {
+    background-position: -200% 0;
   }
+}
+
+/* Agent Specific Colors */
+.console-message.agent-supervisor {
+  border-left-color: #f5d15f;
+  background: rgba(48, 39, 16, 0.42);
+}
+.console-message.agent-strategy {
+  border-left-color: #7bc8ff;
+  background: rgba(22, 38, 56, 0.48);
+}
+.console-message.agent-observer {
+  border-left-color: #8fe3b0;
+  background: rgba(18, 34, 31, 0.48);
+}
+.console-message.agent-actor {
+  border-left-color: #ef5b5b;
+  background: rgba(46, 20, 20, 0.48);
 }
 
 .console-message-label {
@@ -507,9 +575,11 @@ kbd {
   color: #cddcf0;
 }
 
-.image-message img {
+.image-message img,
+.console-observation-image {
   width: 100%;
   max-height: 260px;
+  margin-top: 8px;
   border: 1px solid rgba(127, 161, 198, 0.22);
   border-radius: 6px;
   background: rgba(5, 9, 14, 0.86);

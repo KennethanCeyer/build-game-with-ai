@@ -31,6 +31,7 @@ let lastPuzzleCue = "";
 let agentPlaybackActive = false;
 let puzzleCueActive = false;
 let currentTurnModel = null;
+let currentTurnAgentName = "";
 let statePollPending = false;
 let lastCameraCommandId = 0;
 
@@ -452,13 +453,15 @@ function bindUi() {
 
 function onKeyDown(event) {
   audio.unlock();
-  if (isTypingInConsole(event)) return;
+
   if (event.key === "`") {
     event.preventDefault();
     audio.play("open");
     openConsole(!consolePanel.classList.contains("open"));
     return;
   }
+
+  if (isTypingInConsole() || agentPlaybackActive) return;
   if (event.code === "KeyI") {
     event.preventDefault();
     toggleInventory();
@@ -505,13 +508,22 @@ function hasMovementKeys() {
   return ["KeyW", "KeyA", "KeyS", "KeyD"].some((key) => pressedKeys.has(key));
 }
 
-function isTypingInConsole(event) {
-  return consolePanel.classList.contains("open") && event.key !== "`";
+function isTypingInConsole() {
+  const open = consolePanel.classList.contains("open");
+  if (!open) return false;
+  // 입력창에 실제 포커스가 있는 경우에만 '타이핑 중'으로 판단
+  return document.activeElement === consoleInput;
 }
 
 function openConsole(open) {
   consolePanel.classList.toggle("open", open);
-  if (open) consoleInput.focus();
+  if (open) {
+    consoleInput.focus();
+  } else {
+    document.body.classList.remove("console-maximized");
+    if (consoleMaximize) consoleMaximize.textContent = "최대화";
+    onResize();
+  }
 }
 
 function toggleInventory() {
@@ -576,35 +588,59 @@ async function readConsoleStream(response, pending) {
 }
 
 async function handleConsoleStreamEvent(event, pending) {
+  // 새로운 메시지가 추가될 때마다 pending(생각 중) 메시지를 최하단으로 이동시켜 시각적 연속성 유지
+  const ensurePendingAtBottom = () => {
+    if (pending && pending.parentElement === consoleLog) {
+      consoleLog.append(pending);
+      scrollConsole();
+    }
+  };
+
   if (event.type === "accepted") {
     setConsoleMessageText(pending, event.screenshot_attached
       ? "요청 접수: 캔버스 이미지를 Gemini 입력으로 첨부했습니다."
       : "요청 접수: 이미지 없이 ADK turn을 시작합니다.");
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "model_start") {
     currentTurnModel = event.model;
-    setConsoleMessageModel(pending, event.model, event.agent_name);
+    currentTurnAgentName = event.agent_name || "";
+    setConsoleMessageModel(pending, event.model, currentTurnAgentName);
     pending.classList.add("thinking");
-    setConsoleMessageText(pending, "모델이 화면과 상태를 보고 다음 입력을 고르는 중입니다");
+    setConsoleMessageText(pending, "모델이 화면과 상태를 보고 다음 입력을 고르는 중입니다...");
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "tool_call") {
     appendConsoleMessage(
       "tool",
       compactText(formatJson(event.args || {}), 1100),
-      { label: `Tool Call · ${event.name}`, model: currentTurnModel, variant: "tool-call" },
+      { 
+        label: `Tool Call · ${event.name}`, 
+        model: currentTurnModel, 
+        agentName: currentTurnAgentName,
+        variant: "tool-call" 
+      },
     );
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "input_buffer") {
     const playbackMessage = appendConsoleMessage(
       "tool",
       `입력 재생 시작: ${event.frames.length} frames · ${summarizeFrames(event.frames)}`,
-      { label: "Input Replay", model: currentTurnModel, variant: "input-playback" },
+      { 
+        label: "Input Replay", 
+        model: currentTurnModel, 
+        agentName: currentTurnAgentName,
+        variant: "input-playback" 
+      },
     );
+    ensurePendingAtBottom();
     await playAgentInputBuffer(event.frames, event.camera_yaw_degrees || 0, playbackMessage);
     setConsoleMessageText(playbackMessage, `입력 재생 완료: ${event.frames.length} frames · tool response를 기다립니다.`);
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "tool_response") {
@@ -612,20 +648,39 @@ async function handleConsoleStreamEvent(event, pending) {
       lastCameraCommandId = Math.max(lastCameraCommandId, event.response.command.id || 0);
       applyCameraCommand(event.response.command);
     }
-    appendObservationResponse(event);
-    setConsoleMessageText(pending, "도구 결과를 모델에 반환했습니다. 다음 입력 또는 최종 답변을 기다립니다");
+    const observationMessage = appendObservationResponse(event);
+    
+    setConsoleMessageText(pending, "도구 결과를 분석하여 다음 최적의 행동(이동/관찰)을 계획하고 있습니다...");
+    pending.classList.add("thinking"); 
+    
     await refreshState();
+
+    const freshScreenshot = captureSceneDataUrl();
+    if (freshScreenshot && observationMessage) {
+      const img = document.createElement("img");
+      img.src = freshScreenshot;
+      img.className = "console-observation-image";
+      img.onload = scrollConsole;
+      observationMessage.append(img);
+    }
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "final_text") {
     pending.classList.remove("thinking");
-    setConsoleMessageText(pending, event.answer || "ADK turn이 완료되었습니다.");
+    setConsoleMessageText(pending, event.answer || "ADK turn이 완료되었습니다. 결과를 보고합니다.");
+    ensurePendingAtBottom();
     return;
   }
   if (event.type === "final") {
     pending.remove();
     appendAgentResponse(event.payload);
-    audio.play(event.payload?.ok === false ? "error" : "confirm");
+    
+    // 실제 미션 성공 여부에 따라 소리 분기 (단순 턴 완료는 click, 미션 성공은 confirm)
+    const isSuccess = event.payload?.maze_escaped || event.payload?.quest_complete || event.payload?.puzzle_solved;
+    const isError = event.payload?.ok === false;
+    audio.play(isError ? "error" : (isSuccess ? "confirm" : "click"));
+    
     await refreshState();
     return;
   }
@@ -1146,17 +1201,32 @@ function tickPlayerInput(delta) {
 
 function moveActorWithKeys(actor, keys, delta, yawRadians) {
   const move = getMovementVectorForKeys(keys, yawRadians);
-  if (move.lengthSq() === 0) return false;
+  if (move.lengthSq() === 0) {
+    if (actor.userData.behavior !== "jump") {
+      actor.userData.behavior = "idle";
+      actor.userData.gait = "walk";
+    }
+    return false;
+  }
   move.normalize();
-  const running = keys.has("ShiftLeft") || keys.has("ShiftRight");
-  const speed = running ? 4.8 : 2.45;
+  
+  // Shift, ShiftLeft, ShiftRight 모두 달리기로 인식
+  const running = keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+  const speed = running ? 7.5 : 3.8;
   const current = actor.userData.targetPosition.clone();
   const next = current.clone().addScaledVector(move, speed * delta);
   next.x = THREE.MathUtils.clamp(next.x, -worldBounds.x, worldBounds.x);
   next.z = THREE.MathUtils.clamp(next.z, -worldBounds.z, worldBounds.z);
   resolveNavigationCollision(current, next);
   actor.userData.targetPosition.copy(next);
-  actor.rotation.y = Math.atan2(move.x, move.z);
+
+  // 부드러운 회전 처리
+  const targetRotation = Math.atan2(move.x, move.z);
+  let deltaRotation = targetRotation - actor.rotation.y;
+  while (deltaRotation < -Math.PI) deltaRotation += Math.PI * 2;
+  while (deltaRotation > Math.PI) deltaRotation -= Math.PI * 2;
+  actor.rotation.y += deltaRotation * Math.min(1, delta * 12);
+
   actor.userData.gait = running ? "run" : "walk";
   actor.userData.behavior = running ? "running" : "walking";
   driveSync.localControlUntil = performance.now() + 700;
@@ -1207,20 +1277,69 @@ async function playAgentInputBuffer(frames, cameraYawDegrees, playbackMessage = 
       if (keys.has("Space")) startAgentJump(actor);
       const stepMs = 50;
       let elapsed = 0;
+      const startPos = actor.position.clone();
+      let lastPos = startPos.clone();
+      let stuckCheckTime = 0;
+
       while (elapsed < durationMs) {
         const dt = Math.min(stepMs, durationMs - elapsed) / 1000;
         const moved = moveActorWithKeys(actor, keys, dt, yawRadians);
-        if (moved) maybePlayFootstep(actor, dt, keys.has("ShiftLeft") || keys.has("ShiftRight"));
+        
+        if (moved) {
+          const isRunning = keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+          maybePlayFootstep(actor, dt, isRunning);
+          
+          // 충돌 및 끼임 감지 (0.8초간 이동이 미미하면 중단)
+          if (actor.position.distanceTo(lastPos) < 0.01) {
+            stuckCheckTime += dt;
+            if (stuckCheckTime > 0.8) {
+              if (playbackMessage) {
+                const currentText = playbackMessage.querySelector(".console-message-body").textContent;
+                setConsoleMessageText(playbackMessage, `${currentText} (벽 충돌 감지로 중단)`);
+              }
+              return; // 전체 버퍼 중단
+            }
+          } else {
+            stuckCheckTime = 0;
+            lastPos.copy(actor.position);
+          }
+        }
+
         elapsed += stepMs;
+        if (playbackMessage && elapsed % 200 === 0) {
+          const progress = Math.round((elapsed / durationMs) * 100);
+          setConsoleMessageText(
+            playbackMessage,
+            `입력 재생 중 ${index + 1}/${frames.length}: ${(frame.keys || []).join("+") || "idle"} (${progress}%)`
+          );
+        }
         await delay(stepMs);
       }
     }
   } finally {
+    // 이동 루프 종료 후, 시각적 위치를 논리적 위치와 강제로 일치시켜 누적 오차 제거
+    actor.position.copy(actor.userData.targetPosition);
+    
+    // 매쉬가 완전히 정착하고 카메라가 안정화될 때까지 아주 짧게 대기
+    await delay(120);
+
     agentPlaybackActive = false;
+    
+    // 이동 완료 후 최신 화면을 서버에 동기화하여 에이전트의 다음 턴 시야를 확보
+    const afterMovementScreenshot = captureSceneDataUrl();
+    if (afterMovementScreenshot) {
+      fetch("/api/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "sync_screenshot", screenshot_data_url: afterMovementScreenshot }),
+      }).catch(() => {});
+    }
+
     if (!hasMovementKeys()) {
       actor.userData.behavior = "idle";
       actor.userData.gait = "walk";
       actor.userData.stepTimer = 0;
+      // 최종 위치를 서버에 즉시 전송
       await syncDrive(actor, false, false, false);
     }
   }
@@ -1588,10 +1707,12 @@ function appendObservationResponse(event) {
     lines.push("최근 이벤트:");
     response.last_events.forEach((item) => lines.push(`- ${item.message}`));
   }
-  lines.push("이 관찰 내용이 Gemini에 tool response로 전달됩니다.");
-  appendConsoleMessage("tool", lines.join("\n"), {
+  lines.push("이 관찰 내용이 Gemini에 tool response로 전달되었습니다.");
+
+  return appendConsoleMessage("tool", lines.join("\n"), {
     label: `Tool Result · ${event.name}`,
     model: currentTurnModel,
+    agentName: currentTurnAgentName,
     variant: "tool-response",
   });
 }
@@ -1633,6 +1754,7 @@ function appendAgentInputPacket(command, dataUrl) {
 function appendAgentResponse(payload) {
   appendConsoleMessage("agent", payload.answer || payload.message || summarizePayload(payload), {
     model: payload.model || currentTurnModel,
+    agentName: payload.agent_name || "",
   });
   if (payload.trace?.nodes?.length) appendTrace(payload.trace);
 }
@@ -1649,6 +1771,13 @@ function appendConsoleMessage(kind, text, options = {}) {
   const message = document.createElement("article");
   message.className = `console-message ${kind}`;
   if (options.variant) message.classList.add(options.variant);
+  
+  // 에이전트 이름에 따른 전용 색상 클래스 추가
+  if (options.agentName) {
+    const agentClass = getAgentColorClass(options.agentName);
+    if (agentClass) message.classList.add(agentClass);
+  }
+
   const label = document.createElement("div");
   label.className = "console-message-label";
   const labelText = document.createElement("span");
@@ -1666,6 +1795,15 @@ function appendConsoleMessage(kind, text, options = {}) {
   return message;
 }
 
+function getAgentColorClass(agentName) {
+  const lowerName = agentName.toLowerCase();
+  if (lowerName.includes("supervisor") || lowerName.includes("감독자")) return "agent-supervisor";
+  if (lowerName.includes("strategist") || lowerName.includes("전략")) return "agent-strategy";
+  if (lowerName.includes("observer") || lowerName.includes("관측")) return "agent-observer";
+  if (lowerName.includes("actor") || lowerName.includes("행동")) return "agent-actor";
+  return "";
+}
+
 function modelBadge(model, agentName = "") {
   const badge = document.createElement("span");
   badge.className = "model-badge";
@@ -1677,6 +1815,10 @@ function setConsoleMessageModel(message, model, agentName = "") {
   const label = message.querySelector(".console-message-label");
   if (!label || label.querySelector(".model-badge")) return;
   label.append(modelBadge(model, agentName));
+  
+  // 에이전트 이름에 따른 전용 색상 클래스 동적 추가
+  const agentClass = getAgentColorClass(agentName);
+  if (agentClass) message.classList.add(agentClass);
 }
 
 function setConsoleMessageText(message, text) {
@@ -1771,7 +1913,20 @@ function scrollConsole() {
 }
 
 function onResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  camera.aspect = w / h;
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(w, h, false);
+}
+
+const consoleMaximize = document.getElementById("consoleMaximize");
+if (consoleMaximize) {
+  consoleMaximize.addEventListener("click", () => {
+    document.body.classList.toggle("console-maximized");
+    consoleMaximize.textContent = document.body.classList.contains("console-maximized") ? "축소" : "최대화";
+    onResize();
+    // 캔버스 크기 전환 애니메이션(0.3s) 후 다시 한번 리사이즈하여 정확한 크기 보정
+    setTimeout(onResize, 310);
+  });
 }

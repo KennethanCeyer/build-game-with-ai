@@ -90,9 +90,15 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
             response.headers["Cache-Control"] = "no-store"
         return response
 
+    latest_screenshot: str | None = None
+
     @app.get("/api/state")
     def state() -> dict[str, Any]:
-        return {"ok": True, "state": runtime.inspect()}
+        return {
+            "ok": True,
+            "state": runtime.inspect(),
+            "screenshot": latest_screenshot,
+        }
 
     @app.get("/api/models")
     def models() -> dict[str, Any]:
@@ -104,6 +110,8 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
 
     @app.post("/api/reset")
     def reset() -> dict[str, Any]:
+        nonlocal latest_screenshot
+        latest_screenshot = None
         return {"ok": True, "state": runtime.reset()}
 
     @app.post("/api/drive")
@@ -154,12 +162,18 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
 
     @app.post("/api/console")
     def console(request: ConsoleRequest) -> dict[str, Any]:
+        nonlocal latest_screenshot
+        if request.screenshot_data_url:
+            latest_screenshot = request.screenshot_data_url
         if _is_help_command(request.command):
             return _help_payload(runtime)
         return run_real_adk_turn(runtime, request.command, request.screenshot_data_url)
 
     @app.post("/api/console/stream")
     def console_stream(request: ConsoleRequest) -> StreamingResponse:
+        nonlocal latest_screenshot
+        if request.screenshot_data_url:
+            latest_screenshot = request.screenshot_data_url
         events: Queue[dict[str, Any] | None] = Queue()
 
         def worker() -> None:
@@ -198,6 +212,9 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
 
     @app.post("/api/command")
     def command(request: ConsoleRequest) -> dict[str, Any]:
+        nonlocal latest_screenshot
+        if request.screenshot_data_url:
+            latest_screenshot = request.screenshot_data_url
         return run_real_adk_turn(runtime, request.command, request.screenshot_data_url)
 
     if web_dir.exists():
