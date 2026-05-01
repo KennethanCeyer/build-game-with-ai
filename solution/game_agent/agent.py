@@ -23,19 +23,19 @@ class AgentModelProfile:
 
 # 에이전트 모델 프로필 정의
 DIRECTOR_MODEL = AgentModelProfile(
-    agent_name="director",
+    agent_name="감독관",
     model="gemini-3-flash-preview",
-    role="Fast workshop-facing planner and tool caller.",
+    role="빠른 판단이 필요한 실습 시나리오 기획 및 도구 호출 담당",
 )
 QA_MODEL = AgentModelProfile(
-    agent_name="qa_automation",
+    agent_name="QA_자동화",
     model="gemini-3.1-pro-preview",
-    role="Careful multi-step QA reasoning over state, screenshots, and expected outcomes.",
+    role="상태 정보와 스크린샷을 기반으로 한 정밀한 다단계 QA 추론 담당",
 )
 VISION_MODEL = AgentModelProfile(
-    agent_name="vision_verifier",
+    agent_name="시각_검증기",
     model="gemini-3.1-flash-lite-preview",
-    role="Fast screenshot confirmation for capture-heavy hands-on steps.",
+    role="대량의 캡처 데이터를 기반으로 한 빠른 시각적 상태 확인 담당",
 )
 
 
@@ -51,31 +51,31 @@ def workshop_model_profiles() -> list[dict[str, str]]:
 DEFAULT_MODEL = DIRECTOR_MODEL.model
 
 CONTROLLER_INSTRUCTION = """
-You control the player character in a live 3D game QA scene.
+당신은 실제 3D 게임 QA 환경에서 플레이어 캐릭터를 조작하는 에이전트입니다.
 
-Hard rules:
-- Never teleport.
-- Never ask for direct coordinates.
-- Never call hidden routes or scenario shortcuts.
-- Never claim success until tool output state/events show success.
-- To observe, call inspect_game_state.
-- To move or interact, call apply_input_buffer only.
-- To change the camera view (yaw, pitch, zoom), call adjust_camera_view.
-- Allowed input keys are KeyW, KeyA, KeyS, KeyD, ShiftLeft, Space, and KeyE.
-- With camera_yaw_degrees=0, KeyW moves north, KeyS south, KeyD east, and KeyA west.
-- Use short observe -> act -> observe loops.
-- To start or finish the maze, you can move into the marker or press KeyE for interaction.
-- When the request is answered or you have enough evidence, call exit_loop.
+엄격한 규칙:
+- 순간이동을 절대 사용하지 마세요. (도구가 제공되지 않음)
+- 모델에게 좌표 정보를 직접 묻지 마세요.
+- 숨겨진 경로 정보를 호출하거나 시나리오 지름길을 쓰지 마세요.
+- 도구의 출력 상태(state)나 이벤트(events) 로그에 성공 메시지가 나타날 때까지 임의로 성공을 선언하지 마세요.
+- 환경을 관찰하려면 inspect_game_state를 호출하세요.
+- 캐릭터를 움직이거나 상호작용하려면 오직 apply_input_buffer만 사용하세요.
+- 카메라 시점을 변경하려면 adjust_camera_view를 호출하세요. (yaw, pitch, zoom 조절 가능)
+- 사용 가능한 입력 키는 KeyW, KeyA, KeyS, KeyD, ShiftLeft, Space, KeyE 입니다.
+- camera_yaw_degrees=0일 때, KeyW는 북쪽, KeyS는 남쪽, KeyD는 동쪽, KeyA는 서쪽으로 움직입니다.
+- 짧은 '관찰 -> 행동 -> 관찰' 루프를 유지하세요.
+- 미로를 시작하거나 탈출할 때는 마커 안으로 이동하거나 KeyE를 눌러 상호작용하세요.
+- 요청이 완료되었거나 충분한 증거를 확보했다면 exit_loop을 호출하여 작업을 종료하세요.
 
-Keep the final answer short: list the keys sent and the observed result.
+최종 답변은 간결하게 작성하세요: 전송한 키 입력 목록과 관찰된 결과를 요약해서 답변하세요.
 """.strip()
 
 
 def build_loop_agent(model: str = DEFAULT_MODEL) -> LoopAgent:
     """최상위 Loop 에이전트를 생성합니다."""
     return LoopAgent(
-        name="agentic_game_loop",
-        description="ADK LoopAgent for repeated inspect-act-verify game QA steps over MCP tools.",
+        name="게임_에이전트_루프",
+        description="MCP 도구를 활용해 관찰-행동-검증 과정을 반복하는 ADK 루프 에이전트입니다.",
         sub_agents=[build_controller_agent(model=model)],
         max_iterations=15,
     )
@@ -85,8 +85,8 @@ def build_controller_agent(model: str = DEFAULT_MODEL) -> LlmAgent:
     """핵심 컨트롤러 에이전트를 생성합니다."""
     return LlmAgent(
         model=model,
-        name="agentic_game_controller",
-        description="Controls the live 3D game only through player-equivalent input buffers.",
+        name="게임_조작_에이전트",
+        description="실제 플레이어와 동일한 입력 버퍼 방식으로 3D 게임을 제어합니다.",
         instruction=CONTROLLER_INSTRUCTION,
         tools=[build_mcp_toolset(), exit_loop],
     )

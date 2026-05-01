@@ -22,19 +22,19 @@ class AgentModelProfile:
 
 # TODO(실습-2): 실습 상황에 맞는 모델 프로필을 정의하세요.
 DIRECTOR_MODEL = AgentModelProfile(
-    agent_name="director",
-    model="TODO_MODEL_NAME",
-    role="TODO_ROLE_DESCRIPTION",
+    agent_name="감독관",
+    model="TODO_모델명_입력",  # 예: gemini-3-flash-preview
+    role="빠른 판단이 필요한 실습 시나리오 기획 및 도구 호출 담당",
 )
 QA_MODEL = AgentModelProfile(
-    agent_name="qa_automation",
-    model="TODO_MODEL_NAME",
-    role="TODO_ROLE_DESCRIPTION",
+    agent_name="QA_자동화",
+    model="TODO_모델명_입력",  # 예: gemini-3.1-pro-preview
+    role="상태 정보와 스크린샷을 기반으로 한 정밀한 다단계 QA 추론 담당",
 )
 VISION_MODEL = AgentModelProfile(
-    agent_name="vision_verifier",
-    model="TODO_MODEL_NAME",
-    role="TODO_ROLE_DESCRIPTION",
+    agent_name="시각_검증기",
+    model="TODO_모델명_입력",  # 예: gemini-3.1-flash-lite-preview
+    role="대량의 캡처 데이터를 기반으로 한 빠른 시각적 상태 확인 담당",
 )
 
 
@@ -50,17 +50,27 @@ def workshop_model_profiles() -> list[dict[str, str]]:
 DEFAULT_MODEL = DIRECTOR_MODEL.model
 
 CONTROLLER_INSTRUCTION = """
-당신은 3D 게임 QA 환경에서 플레이어 캐릭터를 조작하는 에이전트입니다.
-... (TODO: 에이전트의 페르소나와 행동 지침을 작성하세요) ...
+당신은 실제 3D 게임 QA 환경에서 플레이어 캐릭터를 조작하는 에이전트입니다.
+
+엄격한 규칙:
+- 순간이동을 절대 사용하지 마세요. (도구가 제공되지 않음)
+- 환경을 관찰하려면 inspect_game_state를 호출하세요.
+- 캐릭터를 움직이거나 상호작용하려면 오직 apply_input_buffer만 사용하세요.
+- 사용 가능한 입력 키는 KeyW, KeyA, KeyS, KeyD, ShiftLeft, Space, KeyE 입니다.
+- 짧은 '관찰 -> 행동 -> 관찰' 루프를 유지하세요.
+- 요청이 완료되었거나 충분한 증거를 확보했다면 exit_loop을 호출하여 작업을 종료하세요.
+
+(여기에 추가적인 행동 지침을 작성하여 에이전트의 지능을 높여보세요)
 """.strip()
 
 
 def build_loop_agent(model: str = DEFAULT_MODEL) -> LoopAgent:
     """최상위 Loop 에이전트를 생성합니다."""
     # TODO(실습-3): LoopAgent를 반환하도록 구현하세요.
+    # 힌트: sub_agents=[build_controller_agent(model=model)], max_iterations=15
     return LoopAgent(
-        name="agentic_game_loop",
-        sub_agents=[],  # 힌트: build_controller_agent를 호출하여 추가하세요.
+        name="게임_에이전트_루프",
+        sub_agents=[],
         max_iterations=0,
     )
 
@@ -68,11 +78,12 @@ def build_loop_agent(model: str = DEFAULT_MODEL) -> LoopAgent:
 def build_controller_agent(model: str = DEFAULT_MODEL) -> LlmAgent:
     """핵심 컨트롤러 에이전트를 생성합니다."""
     # TODO(실습-4): LlmAgent를 반환하고 필요한 도구를 등록하세요.
+    # 힌트: instruction=CONTROLLER_INSTRUCTION, tools=[build_mcp_toolset(), exit_loop]
     return LlmAgent(
         model=model,
-        name="agentic_game_controller",
-        instruction="",  # 힌트: CONTROLLER_INSTRUCTION 상수를 사용하세요.
-        tools=[],  # 힌트: build_mcp_toolset()과 exit_loop를 추가하세요.
+        name="게임_조작_에이전트",
+        instruction="",
+        tools=[],
     )
 
 
