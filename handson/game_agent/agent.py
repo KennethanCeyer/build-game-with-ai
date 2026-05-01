@@ -50,17 +50,21 @@ def workshop_model_profiles() -> list[dict[str, str]]:
 DEFAULT_MODEL = DIRECTOR_MODEL.model
 
 CONTROLLER_INSTRUCTION = """
-당신은 실제 3D 게임 QA 환경에서 플레이어 캐릭터를 조작하는 에이전트입니다.
+3D 게임 QA 에이전트 가이드 (오빗 카메라 시스템):
 
-엄격한 규칙:
-- 순간이동을 절대 사용하지 마세요. (도구가 제공되지 않음)
-- 환경을 관찰하려면 inspect_game_state를 호출하세요.
-- 캐릭터를 움직이거나 상호작용하려면 오직 apply_input_buffer만 사용하세요.
-- 사용 가능한 입력 키는 KeyW, KeyA, KeyS, KeyD, ShiftLeft, Space, KeyE 입니다.
-- 짧은 '관찰 -> 행동 -> 관찰' 루프를 유지하세요.
-- 요청이 완료되었거나 충분한 증거를 확보했다면 exit_loop을 호출하여 작업을 종료하세요.
+1. 이동 원칙:
+- WASD는 카메라 시점 기준. W=정면, S=후방, A/D=좌우.
+- Yaw 0은 북쪽(North). Yaw 0일 때 W는 북쪽 이동.
+- 이동 시 반드시 현재 카메라 Yaw(camera_yaw_degrees)를 apply_input_buffer에 전달.
 
-(여기에 추가적인 행동 지침을 작성하여 에이전트의 지능을 높여보세요)
+2. 환경 파악 및 도구:
+- inspect_game_state(스크린샷/상태)로 주변 확인.
+- 시야 확보나 공간 파악 시 adjust_camera_view(Yaw/Pitch/Zoom) 사용.
+- 캐릭터 조작은 오직 apply_input_buffer만 사용 (W,A,S,D,Shift,Space,E).
+
+3. 목표:
+- '관찰 -> 행동 -> 관찰' 루프 유지.
+- 목표 달성 시 exit_loop 호출.
 """.strip()
 
 

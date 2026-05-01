@@ -38,6 +38,7 @@ let lastCameraCommandId = 0;
 const cameraControl = {
   yaw: -2.35,
   pitch: 0.74,
+  roll: 0,
   distance: 10.4,
   target: new THREE.Vector3(-2.5, 1.1, 1.0),
   pointerActive: false,
@@ -1353,9 +1354,11 @@ function syncCameraYawForPlayback(yawRadians) {
 function applyCameraCommand(command) {
   const yawDelta = THREE.MathUtils.degToRad(Number(command.yaw_delta_degrees || 0));
   const pitchDelta = THREE.MathUtils.degToRad(Number(command.pitch_delta_degrees || 0));
+  const rollDelta = THREE.MathUtils.degToRad(Number(command.roll_delta_degrees || 0));
   const zoomDelta = Number(command.zoom_delta || 0);
   const targetYaw = cameraControl.yaw + yawDelta;
   const targetPitch = THREE.MathUtils.clamp(cameraControl.pitch + pitchDelta, 0.22, 1.12);
+  const targetRoll = THREE.MathUtils.clamp(cameraControl.roll + rollDelta, -0.785, 0.785);
   const targetDistance = THREE.MathUtils.clamp(cameraControl.distance + zoomDelta, 3.6, 11.5);
   const steps = 12;
   let step = 0;
@@ -1364,11 +1367,13 @@ function applyCameraCommand(command) {
     step++;
     cameraControl.yaw = THREE.MathUtils.lerp(cameraControl.yaw, targetYaw, lerpFactor);
     cameraControl.pitch = THREE.MathUtils.lerp(cameraControl.pitch, targetPitch, lerpFactor);
+    cameraControl.roll = THREE.MathUtils.lerp(cameraControl.roll, targetRoll, lerpFactor);
     cameraControl.distance = THREE.MathUtils.lerp(cameraControl.distance, targetDistance, lerpFactor);
     if (step < steps) requestAnimationFrame(tick);
     else {
       cameraControl.yaw = targetYaw;
       cameraControl.pitch = targetPitch;
+      cameraControl.roll = targetRoll;
       cameraControl.distance = targetDistance;
     }
   }
@@ -1607,6 +1612,9 @@ function updateCamera(delta) {
   );
   camera.position.copy(cameraControl.target).add(offset);
   camera.lookAt(cameraControl.target);
+  if (cameraControl.roll !== 0) {
+    camera.rotateZ(cameraControl.roll);
+  }
 }
 
 function createAudioBus() {

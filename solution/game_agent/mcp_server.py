@@ -149,17 +149,15 @@ def apply_input_buffer(
 ) -> dict[str, Any]:
     """일련의 입력 프레임(WASD, Shift, Space, E)을 전송하여 캐릭터를 조작합니다.
     
-    복합적인 경로 계획을 위해 여러 개의 프레임을 한 번의 호출에 포함시키는
-    시퀀스(Sequence) 방식을 강력히 권장합니다.
-    예를 들어 [{"keys": ["KeyW"], "duration_ms": 2000},
-    {"keys": ["KeyW", "KeyD"], "duration_ms": 1000}]와 같이
-    [전진 2초, 우회전 1초]를 하나의 리스트에 담아 호출하면
-    에이전트의 효율성이 극대화됩니다.
+    [중요] 캐릭터 이동은 카메라 시점을 기준으로 결정됩니다.
+    - W키: 현재 카메라가 바라보는 정면 방향으로 이동 및 회전
+    - S/A/D키: 각각 카메라 기준 후방/좌측/우측으로 이동
+    이동 시에는 inspect_game_state에서 확인한 현재 카메라의 yaw 각도(camera_yaw_degrees)를 
+    함께 전달해야 의도한 방향으로 정확히 움직입니다.
     
-    Args:
-        frames: 입력 프레임 리스트. 각 프레임은 keys(list[str])와 duration_ms(int)를 가집니다.
-        actor_id: 조작할 캐릭터 ID (기본값: "rhea").
-        camera_yaw_degrees: 입력을 적용할 때의 기준 카메라 Yaw 각도 (0: 전방, 90: 오른쪽 등).
+    복합적인 경로 계획을 위해 여러 개의 프레임을 한 번의 호출에 포함시키는 시퀀스(Sequence) 방식을 강력히 권장합니다.
+    예를 들어 [{"keys": ["KeyW"], "duration_ms": 2000}, {"keys": ["KeyW", "KeyD"], "duration_ms": 1000}]와 같이
+    [전진 2초, 우회전 1초]를 하나의 리스트에 담아 호출하면 에이전트의 효율성이 극대화됩니다.
     """
     normalized_actor_id = _normalize_actor_id(actor_id)
     if normalized_actor_id != "rhea":
@@ -197,7 +195,17 @@ def adjust_camera_view(
     pitch_delta_degrees: float = 0.0,
     zoom_delta: float = 0.0,
 ) -> dict[str, Any]:
-    """카메라의 각도(yaw, pitch)와 줌(zoom)을 조정합니다. 주변 환경을 더 넓게 보거나 특정 방향을 조망할 때 사용합니다."""
+    """카메라의 각도(yaw, pitch)와 줌(zoom)을 조정합니다.
+    이 게임은 오빗 카메라(Orbit Camera) 시스템을 사용합니다.
+    주변 환경을 더 넓게 보거나 특정 방향을 조망할 때 사용합니다. 시점 변경은 WASD 이동의 기준점도 바꿈에 유의하세요.
+
+    - yaw_delta_degrees: 수평 회전량. 양수는 오른쪽, 음수는 왼쪽으로 카메라를 돌립니다.
+      * Yaw 0의 의미: 월드 좌표계의 북쪽(North)을 정면으로 응시함. 시계 방향으로 회전합니다.
+    - pitch_delta_degrees: 수직 기울기 변화량. 양수는 위에서 아래를 내려다보는 시점(Top-down)으로, 음수는 지평선을 바라보는 시점으로 바꿉니다.
+      * 범위: 약 12도(0.22 rad) ~ 64도(1.12 rad). 64도에 가까울수록 수직으로 내려다봅니다.
+    - zoom_delta: 카메라 거리 변화량. 양수는 캐릭터로부터 멀어지며(줌 아웃) 더 넓은 영역을 보여주고, 음수는 가까워집니다(줌 인).
+      * 거리 범위: 3.6 ~ 11.5 unit.
+    """
 
     runtime_result = _runtime_post(
         "/api/camera-control",

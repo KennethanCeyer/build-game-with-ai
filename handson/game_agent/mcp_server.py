@@ -48,8 +48,14 @@ def apply_input_buffer(
     camera_yaw_degrees: float = 0.0,
 ) -> dict[str, Any]:
     """일련의 키보드 입력 프레임을 게임 엔진에 전달하여 캐릭터를 조작합니다.
-    frames 예시: [{"keys": ["KeyW"], "duration_ms": 200}] (W키를 0.2초간 입력)
-    이동 시에는 현재 카메라의 yaw 각도를 함께 전달해야 정확한 방향으로 움직입니다.
+    
+    [중요] 캐릭터 이동(WASD)은 카메라 시점을 기준으로 결정됩니다.
+    - W키: 카메라가 바라보는 방향으로 이동 및 회전
+    - S/A/D키: 각각 카메라 기준 후방/좌측/우측으로 이동
+    이동 시에는 inspect_game_state에서 확인한 현재 카메라의 yaw 각도(camera_yaw_degrees)를 
+    함께 전달해야 정확한 방향으로 움직입니다.
+
+    frames 예시: [{"keys": ["KeyW"], "duration_ms": 2000}, {"keys": ["KeyW", "KeyD"], "duration_ms": 1000}]
     """
     normalized_actor_id = _normalize_actor_id(actor_id)
     if normalized_actor_id != "rhea":
@@ -87,7 +93,17 @@ def adjust_camera_view(
     pitch_delta_degrees: float = 0.0,
     zoom_delta: float = 0.0,
 ) -> dict[str, Any]:
-    """카메라의 각도(yaw, pitch)와 줌(zoom)을 조정합니다. 주변 환경을 더 넓게 보거나 특정 방향을 조망할 때 사용합니다."""
+    """카메라의 각도(yaw, pitch)와 줌(zoom)을 조정합니다.
+    이 게임은 오빗 카메라(Orbit Camera) 시스템을 사용합니다.
+    주변 환경을 더 넓게 보거나 특정 방향을 조망할 때 사용합니다. 시점 변경은 WASD 이동의 기준점도 바꿉니다.
+
+    - yaw_delta_degrees: 수평 회전량. 양수는 오른쪽, 음수는 왼쪽으로 카메라를 돌립니다.
+      * Yaw 0의 의미: 월드 좌표계의 북쪽(North)을 정면으로 응시함.
+    - pitch_delta_degrees: 수직 기울기 변화량. 양수는 위에서 아래를 내려다보는 시점(Top-down)으로, 음수는 지평선을 바라보는 시점으로 바꿉니다.
+      * 범위: 약 12도 ~ 64도.
+    - zoom_delta: 카메라 거리 변화량. 양수는 캐릭터로부터 멀어지며(줌 아웃) 더 넓은 영역을 보여주고, 음수는 가까워집니다(줌 인).
+      * 거리 범위: 3.6 ~ 11.5 unit.
+    """
 
     runtime_result = _runtime_post(
         "/api/camera-control",

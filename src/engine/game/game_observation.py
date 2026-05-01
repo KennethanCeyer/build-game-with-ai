@@ -59,8 +59,12 @@ def agent_visible_state(state: dict[str, Any]) -> dict[str, Any]:
                 "현재 위치에서 보이는 상호작용 대상들의 방향 정보를 제공합니다."
             ),
             "movement_hint": (
-                "camera_yaw_degrees=0일 때, W키는 북쪽, S키는 남쪽, D키는 동쪽, A키는 서쪽으로 이동합니다. "
-                "짧은 입력 버퍼를 보낸 뒤 다시 관찰하세요."
+                "캐릭터 이동(WASD)은 현재 카메라 시점을 기준으로 결정됩니다. "
+                "W키를 누르면 카메라가 바라보는 방향으로 이동하며, 캐릭터는 즉시 해당 방향으로 회전합니다. "
+                "게임 월드의 절대 좌표계(N, S, E, W)와 카메라 기준 좌표계가 다를 수 있음을 유의하세요. "
+                "예를 들어 카메라를 회전시킨 상태에서는 W키가 월드 기준 남쪽을 향할 수도 있습니다. "
+                "필요하다면 adjust_camera_view 도구로 시점을 조정하여 공간 관계를 파악하세요. "
+                "camera_yaw_degrees는 이동 시 기준이 된 카메라의 Yaw 각도입니다."
             ),
             "visible_landmarks": _relative_landmarks(state, player),
             "local_clearance": _local_clearance(state, player),
