@@ -19,3 +19,34 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+================================================================================
+THIRD-PARTY LICENSES AND ATTRIBUTIONS
+================================================================================
+
+This project incorporates third-party assets and libraries. Below is the 
+license information for these components:
+
+1. 3D Character Models (Quaternius)
+-----------------------------------
+- Source: Quaternius (https://quaternius.com)
+- License: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+- URL: https://creativecommons.org/publicdomain/zero/1.0/
+- Summary: These assets are in the public domain. You can copy, modify, 
+  and distribute the work, even for commercial purposes, all without 
+  asking permission.
+
+2. Audio and Sound Effects (Kenney)
+-----------------------------------
+- Source: Kenney Assets (https://kenney.nl)
+- License: CC0 1.0 Universal (CC0 1.0) Public Domain Dedication
+- URL: https://creativecommons.org/publicdomain/zero/1.0/
+- Summary: These assets are in the public domain and can be used for any 
+  purpose without attribution.
+
+3. Three.js Library
+-------------------
+- Source: Three.js (https://threejs.org/)
+- License: MIT License
+- URL: https://github.com/mrdoob/three.js/blob/dev/LICENSE
+- Copyright: (c) 2010-2024 three.js authors
