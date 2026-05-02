@@ -253,7 +253,7 @@ sub_agents.0
     For further information visit https://errors.pydantic.dev/2.13/v/model_type
 ```
 
-이 에러는 우리가 수정해야 할 `handson/game_agent/agent.py` 파일 내 설정값이 아직 `...`으로 비어 있기 때문에 발생하는 지극히 정상적인 현상입니다. 자 이제 이 에러를 하나씩 지워나가며 에이전트의 구성을 직접 완성해 봅시다.
+해당 오류는 `handson/game_agent/agent.py` 파일의 설정값이 아직 채워지지 않아 발생하는 의도된 현상입니다. 지금부터 비어 있는 설정을 하나씩 완성하며 전체 시스템을 구성해 봅시다.
 
 ---
 
