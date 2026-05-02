@@ -94,9 +94,22 @@ class CameraStateRequest(BaseModel):
     distance: float
 
 
+from fastapi.middleware.cors import CORSMiddleware
+
+
 def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
     runtime = simulator or create_default_simulator()
     app = FastAPI(title="Agentic Game Demo Runtime")
+
+    # Cloud Shell 프록시 및 외부 접근을 위한 CORS 설정
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
     web_dir = Path(__file__).resolve().parents[2] / "web"
     next_camera_command_id = 0
 
