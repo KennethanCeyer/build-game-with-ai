@@ -236,30 +236,7 @@ INFO:     Uvicorn running on http://127.0.0.1:8787
 명령어를 입력해 보셨나요? 아마 터미널에는 아래와 같은 `ValidationError`가 발생하며 실행되지 않을 것입니다.
 
 ```text
-(.venv) sniper45han@cloudshell:~/build-game-with-ai (gde-project-aicloud)$ python run_game.py handson
---- Starting Agentic Game Demo in [handson] mode ---
-/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/authlib/_joserfc_helpers.py:8: AuthlibDeprecationWarning: authlib.jose module is deprecated, please use joserfc instead.
-It will be compatible before version 2.0.0.
-  from authlib.jose import ECKey
-/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled.
-  check_feature_enabled()
-Traceback (most recent call last):
-  File "/home/sniper45han/build-game-with-ai/run_game.py", line 22, in <module>
-    from engine.game.runtime_api import main  # noqa: E402
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/sniper45han/build-game-with-ai/src/engine/game/runtime_api.py", line 17, in <module>
-    from .a2a_cards import public_agent_cards
-  File "/home/sniper45han/build-game-with-ai/src/engine/game/a2a_cards.py", line 6, in <module>
-    from game_agent.agent import STRATEGY_AGENT
-  File "/home/sniper45han/build-game-with-ai/handson/game_agent/__init__.py", line 3, in <module>
-    from .agent import root_agent
-  File "/home/sniper45han/build-game-with-ai/handson/game_agent/agent.py", line 230, in <module>
-    root_agent = build_loop_agent()
-                 ^^^^^^^^^^^^^^^^^^
-  File "/home/sniper45han/build-game-with-ai/handson/game_agent/agent.py", line 159, in build_loop_agent
-    supervisor = LlmAgent(
-                 ^^^^^^^^^
-  File "/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+...
     validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 pydantic_core._pydantic_core.ValidationError: 1 validation error for LlmAgent
@@ -272,9 +249,9 @@ sub_agents.0
 
 ---
 
-## 핸즈온 가이드: 에이전트 협업 시스템 완성하기
+## 핸즈온 체크리스트
 
-이번 실습에서는 총 5개의 핸즈온 과제를 통해 멀티 에이전트 협업 시스템을 완성합니다.
+이번 실습에서는 총 5개의 핸즈온 과제를 통해 멀티 에이전트 협업 시스템을 완성해볼 것입니다. 주로 작업은 [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일 안에서 이루어지니 이곳을 잘 살펴보며 작업을 진행해 주세요.
 
 | 번호 | 핸즈온 과제명 | 주요 내용 |
 | :--- | :--- | :--- |
@@ -289,7 +266,11 @@ sub_agents.0
 ### 핸즈온 과제 목록
 
 #### 1. 관측자(Observer) 도구 연결
-에이전트 상황 파악을 위해 시각 정보 수집 도구가 필요합니다. `inspect_game_state` 외에 화면 캡처 도구들을 포함하세요.
+에이전트 상황 파악을 위해 시각 정보 수집 도구가 필요합니다. [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일에서 `observer` 에이전트의 `tools` 속성에 `inspect_game_state` 외에 화면 캡처 도구들을 포함하세요.
+
+
+> [!TIP]
+> [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일의 `:99` ~ `:103` 라인을 잘 살펴봐주세요.
 
 ```python
 # handson/game_agent/agent.py 내 observer 설정 부분
@@ -309,6 +290,9 @@ tools=[
 #### 2. 실행 파이프라인(SequentialAgent) 구축
 관측, 전략 수립, 실행이 순차적으로 이어지도록 에이전트를 정의합니다. 상세 구조는 [SequentialAgent 공식 가이드](https://adk.dev/agents/workflow-agents/sequential-agents/)를 참고하시기 바랍니다.
 
+> [!TIP]
+> [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일의 `:150` 라인을 잘 살펴봐주세요.
+
 ```python
 # handson/game_agent/agent.py 내 worker_pipeline 설정 부분
 worker_pipeline = SequentialAgent(
@@ -323,6 +307,9 @@ worker_pipeline = SequentialAgent(
 #### 3. 감독자(Supervisor) 하위 에이전트 등록
 감독자가 작업을 파이프라인에 위임할 수 있도록 구성합니다. 상세 내용은 [Multi-Agent 시스템 문서](https://adk.dev/agents/multi-agents/)에서 확인할 수 있습니다.
 
+> [!TIP]
+> [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일의 `:172` 라인을 잘 살펴봐주세요.
+
 ```python
 # handson/game_agent/agent.py 내 supervisor 설정 부분
 supervisor = LlmAgent(
@@ -335,6 +322,9 @@ supervisor = LlmAgent(
 
 #### 4. 자율 제어 루프(LoopAgent) 설정 및 반복 횟수 지정
 명령 완수 시까지 스스로 사고하고 행동하도록 루프를 완성합니다. 동작 원리는 [LoopAgent 공식 가이드](https://adk.dev/agents/workflow-agents/loop-agents/)를 참고하시기 바랍니다.
+
+> [!TIP]
+> [`handson/game_agent/agent.py`](handson/game_agent/agent.py) 파일의 `:178` 라인을 잘 살펴봐주세요.
 
 ```python
 # handson/game_agent/agent.py 내 build_loop_agent 함수의 반환값 부분
@@ -351,12 +341,29 @@ return LoopAgent(
 
 ### 실행 및 결과 확인
 
-모든 설정을 마쳤다면 이제 에이전트가 게임 속 문제를 어떻게 해결하는지 함께 확인해 볼까요? 서버를 재시작(`python run_game.py`)한 뒤 브라우저(`http://127.0.0.1:8787`)를 열고 다음 과정을 따라가 봅시다.
+모든 설정을 마쳤다면 이제 에이전트가 게임 속 문제를 어떻게 해결하는지 함께 확인해 볼까요? 다음 명령으로 서버를 재시작 해봅시다!
 
-먼저 NPC 퀘스트 버튼을 좌측 상단 패널에서 누르신 후 에이전트 대화 내용을 따라가 봅시다. 이 과정에서 시간이 조금 걸릴 수 있고 상황에 따라 퀘스트 완료가 실패할 수도 있습니다.
+```bash
+python run_game.py handson
+```
+
+명령어를 실행하고 나서 다음과 같은 출력이 나왔다면 정상입니다.
+
+```text
+INFO:     Started server process [1337]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8787 (Press CTRL+C to quit)
+```
+
+터미널 상에 보이는 `http:127.0.0.1:8787` 링크를 `컨트롤` + `좌측 마우스 버튼`을 클릭하여 열어봅시다. 먼저 NPC 퀘스트 버튼을 좌측 상단 패널에서 누르신 후 에이전트 대화 내용을 따라가 봅시다. 이 과정에서 시간이 조금 걸릴 수 있고 상황에 따라 퀘스트 완료가 실패할 수도 있습니다.
 
 > [!NOTE]
-> **실패하셨나요?** 혹시 지금의 구조를 더 낫게 할 방법은 없을까 고민하며 에이전트 지침(Instruction)을 보강하거나 도구 구성을 몇 가지 바꿔보세요. 이 과정 자체가 훌륭한 에이전트 엔지니어링 실습이 됩니다.
+> **혹시 실패하셨나요?** 다음 점검 항목을 따라가보세요.
+> 1. 혹시 Python 문법 에러가 발생하신건 아닌지 확인해보세요. 문법 에러를 잘 읽어보시면 알 수 있습니다.
+> 2. 의존성을 모두 잘 설치하셨나요? `pip install -r requirements.txt`를 진행하셨는지 점검해보세요.
+> 3. 게임 시작전 환경 변수를 잘 설정하셨는지 점검해보세요. `.env` 파일 안에 `export GEMINI_API_KEY=""`에 올바른 API KEY가 들어있어야 합니다.
+> 4. 혹시 이미 `8787` 포트를 사용하는 다른 프로그램이 실행중인 것은 아닌가요? 만약 그렇다면, 다른 프로그램을 종료하거나 포트를 변경해주세요.
 
 NPC 퀘스트가 완료되었으면 에이전트 대화 패널을 크게 확대해서 전체 과정을 살펴보며 이해해 봅시다. 좌측 상단 패널에 남은 미로 탈출과 퍼즐 풀기 태스크들도 직접 완료해 보세요!
 
@@ -399,7 +406,15 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 > [!NOTE]
 > 아직 ADK의 몇 가지 기능은 실험적인 단계라 경고 메시지가 발생할 수 있지만, 실습 진행에는 지장이 없으니 계속 진행해 주시기 바랍니다.
 
-터미널에 출력된 주소인 `http://127.0.0.1:8000`을 클릭하여 열어봅시다. 브라우저에 다음과 같은 화면이 나타납니다.
+터미널에 출력된 주소인 `http://127.0.0.1:8000`을 클릭하여 열어봅시다. (아까처럼 `컨트롤` + `좌측 마우스 버튼`을 클릭해야 서 열 수 있습니다.) 브라우저에 다음과 같은 화면이 나타납니다.
+
+> [!TIP]
+> **Google Cloud Shell 사용자를 위한 팁**
+> Cloud Shell 환경에서는 프록시 보안 정책으로 인해 웹 인터페이스 접근 시 `403 Forbidden` 에러가 발생할 수 있습니다. 이 경우 아래와 같이 `--allowed_origins` 옵션에 본인의 Cloud Shell 웹 미리보기 URL을 추가하여 실행해 보세요.
+> ```bash
+> adk web handson/ --allowed_origins "https://8000-cs-..."
+> ```
+> 또한 8787 포트(게임 엔진)와 8000 포트(ADK Web) 모두가 미리보기로 열려 있어야 실시간 데이터 통신이 원활하게 작동합니다.
 
 ![ADK Web 인터페이스](./assets/adk-web-interface.png)
 
