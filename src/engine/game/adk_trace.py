@@ -43,6 +43,8 @@ def trace_from_adk_events(
     return {"nodes": nodes, "edges": edges}
 
 
+from .game_observation import agent_visible_state
+
 def summarize_tool_response(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
@@ -50,16 +52,21 @@ def summarize_tool_response(value: Any) -> Any:
     state = value.get("state")
     if not isinstance(state, dict):
         return value
-    flags = state.get("flags", {})
+
+    # WorldState raw state를 UI용 가시 상태로 변환
+    visible_state = agent_visible_state(state) if "actors" in state else state
+    flags = visible_state.get("flags", {})
+
     return {
         "ok": value.get("ok", True),
         "message": value.get("message", ""),
         "degraded": value.get("degraded", False),
-        "player": state.get("player", {}),
-        "navigation_observation": state.get("navigation_observation", {}),
+        "player": visible_state.get("player", {}),
+        "navigation_observation": visible_state.get("navigation_observation", {}),
         "flags": flags,
-        "goals": state.get("goals", []),
-        "last_events": state.get("events", [])[-3:],
+        "goals": visible_state.get("goals", []),
+        "last_events": visible_state.get("events", [])[-3:],
+        "agent_memory_result": state.get("agent_memory_result"),
     }
 
 
@@ -74,20 +81,25 @@ def answer_from_tool_events(tool_events: list[dict[str, Any]]) -> str:
         state = response.get("state")
         if not isinstance(state, dict):
             continue
-        player = state.get("player", {})
-        flags = state.get("flags", {})
-        goals = state.get("goals", [])
-        events = state.get("events", [])
+            
+        visible_state = agent_visible_state(state) if "actors" in state else state
+        player = visible_state.get("player", {})
+        flags = visible_state.get("flags", {})
+        goals = visible_state.get("goals", [])
+        events = visible_state.get("events", [])
+        
         nearby = None
         if isinstance(player, dict):
             nearby_data = player.get("nearby_interaction")
             if isinstance(nearby_data, dict):
                 nearby = nearby_data.get("name")
+        
         recent_message = ""
         if isinstance(events, list) and events:
             last_event = events[-1]
             if isinstance(last_event, dict):
                 recent_message = str(last_event.get("message", ""))
+                
         return (
             "현재 런타임 관찰을 기준으로 정리하면, "
             f"목표 상태는 {goals}, 완료 플래그는 {flags}입니다. "

@@ -7,7 +7,7 @@ scene.background = new THREE.Color(0x0b0f14);
 
 const camera = new THREE.PerspectiveCamera(52, window.innerWidth / window.innerHeight, 0.1, 100);
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.0));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = false;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -41,21 +41,36 @@ const cameraControl = {
   roll: 0,
   distance: 10.4,
   target: new THREE.Vector3(-2.5, 1.1, 1.0),
+  // 애니메이션을 위한 타겟 값들
+  targetYaw: -2.35,
+  targetPitch: 0.74,
+  targetDistance: 10.4,
+  targetRoll: 0,
   pointerActive: false,
   lastPointer: new THREE.Vector2(),
 };
 const driveSync = {
   elapsed: 0,
-  interval: 0.42,
+  interval: 0.05,
   pending: false,
   lastPayload: "",
   queuedPayload: null,
   localControlUntil: 0,
+  lastPlayedBufferKey: null,
+  lastPlayedBufferSignature: "",
+  suppressBufferSignatureUntil: 0,
+  lastProcessedTick: -1,
+  lastKeysString: "",
 };
 const worldBounds = {
   x: 17.2,
   z: 9.7,
 };
+const movementKeyCodes = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "Space"]);
+const locomotionKeyCodes = new Set(["KeyW", "KeyA", "KeyS", "KeyD"]);
+const localSnapDistance = 2.25;
+const localCorrectionDistance = 0.9;
+const remoteSnapDistance = 3.5;
 const mazeLayout = {
   cols: 7,
   rows: 5,
@@ -97,9 +112,13 @@ const consoleClose = document.querySelector("#consoleClose");
 initLighting();
 initGround();
 initWorldProps();
+let ws = null;
+let reconnectDelay = 1000;
+
 bindUi();
 refreshState();
-startRuntimePolling();
+startWebSocket();
+// startScreenshotSync() 제거됨 - 에이전트 요청 시에만 캡처하도록 변경
 writeConsole("처음이면 /help 를 입력하세요. 핵심 실습은 NPC 퀘스트, 미로, 퍼즐입니다.");
 animate();
 
@@ -397,8 +416,8 @@ function bindUi() {
     const dx = event.clientX - cameraControl.lastPointer.x;
     const dy = event.clientY - cameraControl.lastPointer.y;
     cameraControl.lastPointer.set(event.clientX, event.clientY);
-    cameraControl.yaw -= dx * 0.006;
-    cameraControl.pitch = THREE.MathUtils.clamp(cameraControl.pitch + dy * 0.004, 0.22, 1.12);
+    cameraControl.targetYaw -= dx * 0.006;
+    cameraControl.targetPitch = THREE.MathUtils.clamp(cameraControl.targetPitch + dy * 0.004, 0.05, 1.48);
   });
   canvas.addEventListener("pointerup", (event) => {
     cameraControl.pointerActive = false;
@@ -411,11 +430,13 @@ function bindUi() {
     "wheel",
     (event) => {
       event.preventDefault();
-      cameraControl.distance = THREE.MathUtils.clamp(
+      const newDist = THREE.MathUtils.clamp(
         cameraControl.distance + event.deltaY * 0.006,
         3.6,
         11.5,
       );
+      cameraControl.distance = newDist;
+      cameraControl.targetDistance = newDist;
     },
     { passive: false },
   );
@@ -473,27 +494,51 @@ function onKeyDown(event) {
     contextInteract();
     return;
   }
-  if (["KeyW", "KeyA", "KeyS", "KeyD", "ShiftLeft", "ShiftRight", "Space"].includes(event.code)) {
-    event.preventDefault();
+  if (!movementKeyCodes.has(event.code)) return;
+
+  event.preventDefault();
+  if (event.repeat && pressedKeys.has(event.code)) return;
+
+  if (!pressedKeys.has(event.code)) {
+    flushDriveInput(pressedKeys);
     pressedKeys.add(event.code);
+    driveSync.lastKeysString = keySignature(pressedKeys);
+    driveSync.localControlUntil = performance.now() + 350;
     if (event.code === "Space") startJump();
+    else sendDrivePayload(makeDrivePayload(pressedKeys, 1));
   }
 }
 
 function onKeyUp(event) {
-  if (pressedKeys.delete(event.code)) syncIdleIfStopped();
+  if (!movementKeyCodes.has(event.code)) return;
+  event.preventDefault();
+  if (!pressedKeys.has(event.code)) return;
+
+  flushDriveInput(pressedKeys);
+  pressedKeys.delete(event.code);
+  driveSync.lastKeysString = keySignature(pressedKeys);
+
+  const actor = actorMeshes.get("rhea");
+  if (actor && !hasMovementKeys() && actor.userData.jumpElapsed <= 0) {
+    actor.userData.behavior = "idle";
+    actor.userData.gait = "walk";
+    actor.userData.stepTimer = 0;
+  }
+  sendDrivePayload(makeDrivePayload(pressedKeys, 1));
 }
 
 function releaseAllMovementKeys() {
   if (pressedKeys.size === 0) return;
+  flushDriveInput(pressedKeys);
   pressedKeys.clear();
+  driveSync.lastKeysString = "";
   cameraControl.pointerActive = false;
   const actor = actorMeshes.get("rhea");
   if (!actor) return;
   actor.userData.behavior = actor.userData.jumpElapsed > 0 ? "jump" : "idle";
   actor.userData.gait = "walk";
   actor.userData.stepTimer = 0;
-  syncDrive(actor, false, actor.userData.jumpElapsed > 0, false);
+  sendDrivePayload(makeDrivePayload(pressedKeys, 1));
 }
 
 function syncIdleIfStopped() {
@@ -502,11 +547,11 @@ function syncIdleIfStopped() {
   actor.userData.behavior = "idle";
   actor.userData.gait = "walk";
   actor.userData.stepTimer = 0;
-  syncDrive(actor, false, false, false);
+  sendDrivePayload(makeDrivePayload(pressedKeys, 1));
 }
 
 function hasMovementKeys() {
-  return ["KeyW", "KeyA", "KeyS", "KeyD"].some((key) => pressedKeys.has(key));
+  return Array.from(locomotionKeyCodes).some((key) => pressedKeys.has(key));
 }
 
 function isTypingInConsole() {
@@ -531,6 +576,11 @@ function toggleInventory() {
   inventoryPanel.root?.classList.toggle("open");
 }
 
+function commandNeedsInitialScreenshot(command) {
+  // 미로, 탈출, 경로 등 시각적 QA가 중요한 모든 상황을 포함하도록 확장
+  return /화면|시각|보이는|색|패턴|그림|이미지|스크린샷|퍼즐|찾아|검사|뭐야|미로|탈출|길|경로|장애물|입력만|이동/i.test(command);
+}
+
 async function runConsoleCommand(command) {
   openConsole(true);
   audio.play("click");
@@ -540,15 +590,36 @@ async function runConsoleCommand(command) {
     appendConsoleMessage("system", helpText());
     return;
   }
-  const screenshotDataUrl = captureSceneDataUrl();
-  appendAgentInputPacket(command, screenshotDataUrl);
+
+  // 첫 화면은 적절한 해상도(768px)와 압축률로 캡처하여 토큰 낭비 방지
+  let screenshot = commandNeedsInitialScreenshot(command)
+    ? captureSceneDataUrl({
+        maxWidth: 768,
+        quality: 0.55,
+        mime: "image/jpeg",
+      })
+    : null;
+
+  // 너무 크면 한 번 더 축소 (안전장치)
+  if (screenshot && screenshot.length > 350000) {
+    screenshot = captureSceneDataUrl({
+      maxWidth: 512,
+      quality: 0.45,
+      mime: "image/jpeg",
+    });
+  }
+
+  appendAgentInputPacket(command, screenshot);
   const pending = appendConsoleMessage("agent", "ADK 요청 접수 중...", { variant: "thinking" });
   try {
     const response = await fetch("/api/console/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command, screenshot_data_url: screenshotDataUrl }),
+      body: JSON.stringify({ command, screenshot_data_url: screenshot }),
     });
+
+
+
     if (!response.body) throw new Error("stream response body is missing");
     await readConsoleStream(response, pending);
   } catch (error) {
@@ -609,7 +680,26 @@ async function handleConsoleStreamEvent(event, pending) {
     currentTurnAgentName = event.agent_name || "";
     setConsoleMessageModel(pending, event.model, currentTurnAgentName);
     pending.classList.add("thinking");
-    setConsoleMessageText(pending, "모델이 화면과 상태를 보고 다음 입력을 고르는 중입니다...");
+    setConsoleMessageText(pending, "에이전트가 상황을 분석하고 있습니다...");
+    ensurePendingAtBottom();
+    return;
+  }
+  if (event.type === "agent_thought") {
+    // 실시간 사고 과정 출력 (누적 방식)
+    if (!pending.dataset.thoughtStarted) {
+      setConsoleMessageText(pending, event.text);
+      pending.dataset.thoughtStarted = "true";
+    } else {
+      appendConsoleMessageText(pending, event.text);
+    }
+    ensurePendingAtBottom();
+    return;
+  }
+  if (event.type === "agent_switch") {
+    // 하위 에이전트 전환 시 UI 헤더 업데이트
+    currentTurnAgentName = event.agent_name || "";
+    currentTurnModel = event.model || currentTurnModel;
+    setConsoleMessageModel(pending, currentTurnModel, currentTurnAgentName);
     ensurePendingAtBottom();
     return;
   }
@@ -642,6 +732,9 @@ async function handleConsoleStreamEvent(event, pending) {
     await playAgentInputBuffer(event.frames, event.camera_yaw_degrees || 0, playbackMessage);
     setConsoleMessageText(playbackMessage, `입력 재생 완료: ${event.frames.length} frames · tool response를 기다립니다.`);
     ensurePendingAtBottom();
+    
+    // 도구 호출 간의 시각적 분리를 위해 짧은 대기 (애니메이션이 안정적으로 idle로 돌아갈 시간)
+    await delay(350);
     return;
   }
   if (event.type === "tool_response") {
@@ -649,21 +742,28 @@ async function handleConsoleStreamEvent(event, pending) {
       lastCameraCommandId = Math.max(lastCameraCommandId, event.response.command.id || 0);
       applyCameraCommand(event.response.command);
     }
+
     const observationMessage = appendObservationResponse(event);
-    
-    setConsoleMessageText(pending, "도구 결과를 분석하여 다음 최적의 행동(이동/관찰)을 계획하고 있습니다...");
-    pending.classList.add("thinking"); 
-    
+
+    setConsoleMessageText(pending, "도구 결과를 분석하여 다음 행동을 계획하고 있습니다.");
+    pending.classList.add("thinking");
+
     await refreshState();
 
-    const freshScreenshot = captureSceneDataUrl();
-    if (freshScreenshot && observationMessage) {
-      const img = document.createElement("img");
-      img.src = freshScreenshot;
-      img.className = "console-observation-image";
-      img.onload = scrollConsole;
-      observationMessage.append(img);
+    const shouldAttachPreview =
+      event.name === "capture_screenshot" ||
+      (event.name === "inspect_game_state" && event.args?.include_screenshot === true);
+    if (shouldAttachPreview) {
+      const freshScreenshot = captureSceneDataUrl({ scale: 1.0, quality: 0.85 });
+      if (freshScreenshot && observationMessage) {
+        const img = document.createElement("img");
+        img.src = freshScreenshot;
+        img.className = "console-observation-image";
+        img.onload = scrollConsole;
+        observationMessage.append(img);
+      }
     }
+
     ensurePendingAtBottom();
     return;
   }
@@ -697,22 +797,59 @@ async function refreshState() {
   drawState(payload.state);
 }
 
-function startRuntimePolling() {
-  setInterval(async () => {
-    if (statePollPending || pressedKeys.size > 0 || agentPlaybackActive || driveSync.pending) {
-      return;
-    }
-    statePollPending = true;
+// ws 및 reconnectDelay 선언이 상단으로 이동되었습니다.
+
+function startWebSocket() {
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${protocol}//${location.host}/ws`);
+
+  ws.onopen = () => {
+    console.log("✅ WebSocket connected");
+    reconnectDelay = 1000; // 연결 성공 시 지연 시간 초기화
+  };
+
+  ws.onmessage = (event) => {
     try {
-      await refreshState();
-      await pollCameraCommands();
-    } catch {
-      // The page can be opened before the dev server is fully restarted.
-    } finally {
-      statePollPending = false;
+      const data = JSON.parse(event.data);
+      if (data.ok) {
+        if (data.state) {
+          // 오래된 틱 정보를 무시하여 네트워크 지연으로 인한 역행(Rubber-banding) 방지
+          if (data.state.tick >= driveSync.lastProcessedTick) {
+            driveSync.lastProcessedTick = data.state.tick;
+            drawState(data.state);
+          } else {
+            // console.debug(`[WS] Ignoring old tick: ${data.state.tick} < ${driveSync.lastProcessedTick}`);
+          }
+        }
+        if (data.camera_commands) {
+          data.camera_commands.forEach(applyCameraCommand);
+        }
+
+        // 에이전트의 온디맨드 스크린샷 요청 처리
+        if (data.type === "screenshot_request") {
+          console.log("📸 Agent requested a screenshot. Capturing now...");
+          uploadScreenshot();
+        }
+      }
+    } catch (e) {
+      console.error("WS Message Error:", e);
     }
-  }, 700);
+  };
+  ws.onclose = () => {
+    console.warn(`⚠️ WebSocket disconnected. Reconnecting in ${reconnectDelay}ms...`);
+    setTimeout(() => {
+      reconnectDelay = Math.min(reconnectDelay * 2, 10000); // 지수 백오프
+      startWebSocket();
+    }, reconnectDelay);
+  };
+
+  ws.onerror = (err) => {
+    console.error("WebSocket Error:", err);
+    ws.close();
+  };
 }
+
+// startScreenshotSync 기능은 이제 웹소켓 screenshot_request 핸들러로 통합되었습니다.
 
 async function pollCameraCommands() {
   const response = await fetch(`/api/camera-commands?after=${lastCameraCommandId}`);
@@ -731,11 +868,11 @@ function drawState(state) {
   state.zones.forEach((zone) => zoneDisplayNames.set(zone.id, zone.name));
   hud.events.replaceChildren(
     ...state.events
-      .slice()
-      .reverse()
       .map((event) => {
         const li = document.createElement("li");
-        li.textContent = event.message;
+        const timeStr = event.timestamp ? new Date(event.timestamp * 1000).toLocaleTimeString() : "";
+        li.textContent = `[${timeStr}] ${event.message}`;
+        li.title = `Tick: ${event.tick}`;
         return li;
       }),
   );
@@ -751,6 +888,22 @@ function drawState(state) {
   replayPuzzleCue(state.events || []);
   updateDialogue(state.events || []);
   state.actors.forEach((actor) => updateActor(actor));
+
+  if (state.last_input_buffer && !agentPlaybackActive && !pressedKeys.size) {
+    const buffer = state.last_input_buffer;
+    const bufferKey = `buf_${buffer.timestamp}`;
+    const signature = inputBufferSignature(buffer.frames, buffer.camera_yaw_degrees);
+    const recentlyPlayedSameBuffer = (
+      signature === driveSync.lastPlayedBufferSignature
+      && performance.now() < driveSync.suppressBufferSignatureUntil
+    );
+    if (bufferKey !== driveSync.lastPlayedBufferKey && !recentlyPlayedSameBuffer) {
+      driveSync.lastPlayedBufferKey = bufferKey;
+      driveSync.lastPlayedBufferSignature = signature;
+      driveSync.suppressBufferSignatureUntil = performance.now() + 5000;
+      playAgentInputBuffer(buffer.frames, buffer.camera_yaw_degrees);
+    }
+  }
 }
 
 function updateQuestApples() {
@@ -889,26 +1042,38 @@ function updatePuzzleVisuals() {
   });
 }
 
+let puzzleTimers = [];
 function replayPuzzleCue(events) {
   const cue = events
     .slice()
     .reverse()
     .find((event) => event.data?.type === "puzzle_cue");
   if (!cue) return;
-  const cueKey = JSON.stringify([cue.tick, cue.data.sequence]);
+  // tick뿐만 아니라 timestamp를 포함하여 동일 틱 내의 재실행(리셋)도 감지하도록 수정
+  const cueKey = JSON.stringify([cue.tick, cue.timestamp, cue.data.sequence]);
   if (cueKey === lastPuzzleCue) return;
   lastPuzzleCue = cueKey;
+
+  // 기존 재생 중인 타이머 모두 취소
+  puzzleTimers.forEach(clearTimeout);
+  puzzleTimers = [];
+  
   const names = cue.data.sequence || [];
   setPuzzleDimmed(true);
   puzzleCueActive = true;
+  
   const initialDelay = names.length > 1 ? 780 : 260;
   names.forEach((name, index) => {
-    setTimeout(() => flashPuzzlePad(`puzzle_${name}`), initialDelay + index * 1180);
+    const t = setTimeout(() => flashPuzzlePad(`puzzle_${name}`), initialDelay + index * 1180);
+    puzzleTimers.push(t);
   });
-  setTimeout(() => {
+
+  const finishTimer = setTimeout(() => {
     puzzleCueActive = false;
     setPuzzleDimmed(false);
+    puzzleTimers = [];
   }, initialDelay + names.length * 1180 + 420);
+  puzzleTimers.push(finishTimer);
 }
 
 function updateDialogue(events) {
@@ -995,11 +1160,52 @@ function updateActor(actor) {
     scene.add(mesh);
     loadActorModel(mesh, actor);
   }
-  if (actor.id === "rhea" && shouldKeepLocalPlayerPose()) return;
-  mesh.userData.behavior = actor.behavior;
-  mesh.userData.gait = actor.gait;
-  mesh.userData.targetPosition.set(actor.position.x, actor.position.y, actor.position.z);
-  mesh.rotation.y = THREE.MathUtils.degToRad(actor.facing_degrees);
+
+  const serverPos = new THREE.Vector3(actor.position.x, actor.position.y, actor.position.z);
+  const serverFacing = THREE.MathUtils.degToRad(Number(actor.facing_degrees || 0));
+  const targetDist = mesh.userData.targetPosition.distanceTo(serverPos);
+  const visualDist = mesh.position.distanceTo(serverPos);
+  const localPlayer = actor.id === "rhea";
+  const locallyControlling = localPlayer && shouldKeepLocalPlayerPose();
+
+  const wasTarget = mesh.userData.targetPosition.clone();
+
+  if (locallyControlling) {
+    if (targetDist > localSnapDistance) {
+      mesh.position.copy(serverPos);
+      mesh.userData.targetPosition.copy(serverPos);
+    } else if (targetDist > localCorrectionDistance) {
+      mesh.userData.targetPosition.lerp(serverPos, 0.08);
+    }
+  } else {
+    mesh.userData.targetPosition.copy(serverPos);
+    if (visualDist > (localPlayer ? localCorrectionDistance : remoteSnapDistance)) {
+      mesh.position.copy(serverPos);
+    }
+    mesh.userData.targetFacingRadians = serverFacing;
+  }
+
+  const targetMoved = wasTarget.distanceToSquared(mesh.userData.targetPosition) > 0.0001;
+  const visuallyMoving = mesh.position.distanceTo(mesh.userData.targetPosition) > 0.025;
+
+  mesh.userData.gait = actor.gait || "walk";
+
+  // 원격 캐릭터의 경우, 타겟이 이동 중이거나 아직 보간 중이면 walking/running 상태 유지
+  if (actor.behavior === "jump") {
+    mesh.userData.behavior = "jump";
+    if (mesh.userData.jumpElapsed <= 0) {
+      mesh.userData.jumpElapsed = 0.001;
+      mesh.userData.jumpStartY = mesh.position.y;
+    }
+  } else if (!locallyControlling && (targetMoved || visuallyMoving)) {
+    mesh.userData.behavior = mesh.userData.gait === "run" ? "running" : "walking";
+  } else {
+    mesh.userData.behavior = actor.behavior || "idle";
+  }
+
+  if (!locallyControlling) {
+    mesh.rotation.y = serverFacing;
+  }
 }
 
 function shouldKeepLocalPlayerPose() {
@@ -1019,6 +1225,7 @@ function createActorShell(actor) {
     behavior: actor.behavior,
     gait: actor.gait,
     targetPosition: new THREE.Vector3(actor.position.x, actor.position.y, actor.position.z),
+    targetFacingRadians: THREE.MathUtils.degToRad(Number(actor.facing_degrees || 0)),
     mixer: null,
     actions: {},
     currentAction: null,
@@ -1180,23 +1387,18 @@ function tickPlayerInput(delta) {
 
   const moved = moveActorWithKeys(actor, pressedKeys, delta, cameraControl.yaw);
   if (moved) {
-    const running = pressedKeys.has("ShiftLeft") || pressedKeys.has("ShiftRight");
-    maybePlayFootstep(actor, delta, running);
+    maybePlayFootstep(actor, delta, isRunningKeySet(pressedKeys));
   } else if (actor.userData.jumpElapsed <= 0) {
     actor.userData.behavior = "idle";
     actor.userData.gait = "walk";
     actor.userData.stepTimer = 0;
   }
 
-  driveSync.elapsed += delta;
-  if ((moved || actor.userData.jumpElapsed > 0) && driveSync.elapsed >= driveSync.interval) {
-    driveSync.elapsed = 0;
-    syncDrive(
-      actor,
-      pressedKeys.has("ShiftLeft") || pressedKeys.has("ShiftRight"),
-      actor.userData.jumpElapsed > 0,
-      moved,
-    );
+  if (hasMovementKeys() || actor.userData.jumpElapsed > 0 || pressedKeys.has("Space")) {
+    driveSync.elapsed += delta;
+    if (driveSync.elapsed >= driveSync.interval) {
+      flushDriveInput(pressedKeys, { force: true });
+    }
   }
 }
 
@@ -1209,29 +1411,84 @@ function moveActorWithKeys(actor, keys, delta, yawRadians) {
     }
     return false;
   }
-  move.normalize();
-  
-  // Shift, ShiftLeft, ShiftRight 모두 달리기로 인식
-  const running = keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+
+  const running = isRunningKeySet(keys);
   const speed = running ? 7.5 : 3.8;
   const current = actor.userData.targetPosition.clone();
   const next = current.clone().addScaledVector(move, speed * delta);
   next.x = THREE.MathUtils.clamp(next.x, -worldBounds.x, worldBounds.x);
   next.z = THREE.MathUtils.clamp(next.z, -worldBounds.z, worldBounds.z);
   resolveNavigationCollision(current, next);
+
+  const moved = next.distanceToSquared(current) > 0.000001;
   actor.userData.targetPosition.copy(next);
 
-  // 부드러운 회전 처리
   const targetRotation = Math.atan2(move.x, move.z);
-  let deltaRotation = targetRotation - actor.rotation.y;
-  while (deltaRotation < -Math.PI) deltaRotation += Math.PI * 2;
-  while (deltaRotation > Math.PI) deltaRotation -= Math.PI * 2;
-  actor.rotation.y += deltaRotation * Math.min(1, delta * 12);
+  actor.userData.targetFacingRadians = targetRotation;
+  actor.rotation.y = lerpAngle(actor.rotation.y, targetRotation, Math.min(1, delta * 24));
 
   actor.userData.gait = running ? "run" : "walk";
   actor.userData.behavior = running ? "running" : "walking";
-  driveSync.localControlUntil = performance.now() + 700;
-  return true;
+  driveSync.localControlUntil = performance.now() + 350;
+  return moved;
+}
+
+function getMovementVectorForKeys(keys, yawRadians) {
+  const forward = new THREE.Vector3(-Math.sin(yawRadians), 0, -Math.cos(yawRadians));
+  const right = new THREE.Vector3(Math.cos(yawRadians), 0, -Math.sin(yawRadians));
+  const move = new THREE.Vector3();
+  if (keys.has("KeyW") || keys.has("W")) move.add(forward);
+  if (keys.has("KeyS") || keys.has("S")) move.sub(forward);
+  if (keys.has("KeyD") || keys.has("D")) move.add(right);
+  if (keys.has("KeyA") || keys.has("A")) move.sub(right);
+  if (move.lengthSq() > 0) move.normalize();
+  return move;
+}
+
+function isRunningKeySet(keys) {
+  return keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
+}
+
+function keySignature(keys) {
+  return Array.from(keys).sort().join(",");
+}
+
+function sortedKeys(keys) {
+  return Array.from(keys).sort();
+}
+
+function makeDrivePayload(keys, durationMs) {
+  return {
+    actor_id: "rhea",
+    keys: sortedKeys(keys),
+    camera_yaw_degrees: THREE.MathUtils.radToDeg(cameraControl.yaw),
+    duration_ms: Number(THREE.MathUtils.clamp(durationMs, 1, 250).toFixed(2)),
+  };
+}
+
+function flushDriveInput(keys = pressedKeys, options = {}) {
+  const durationMs = options.durationMs ?? driveSync.elapsed * 1000;
+  if (!options.force && durationMs < 1) return;
+  driveSync.elapsed = 0;
+  return sendDrivePayload(makeDrivePayload(keys, Math.max(1, durationMs)));
+}
+
+function inputBufferSignature(frames, cameraYawDegrees) {
+  const normalizedFrames = (frames || []).map((frame) => ({
+    keys: sortedKeys(new Set(frame.keys || [])),
+    duration_ms: Number(Number(frame.duration_ms || 0).toFixed(2)),
+  }));
+  return JSON.stringify({
+    camera_yaw_degrees: Number(Number(cameraYawDegrees || 0).toFixed(2)),
+    frames: normalizedFrames,
+  });
+}
+
+function lerpAngle(current, target, alpha) {
+  let delta = target - current;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  return current + delta * alpha;
 }
 
 function maybePlayFootstep(actor, delta, running) {
@@ -1242,106 +1499,105 @@ function maybePlayFootstep(actor, delta, running) {
   }
 }
 
-function getMovementVectorForKeys(keys, yawRadians) {
-  const forward = new THREE.Vector3(-Math.sin(yawRadians), 0, -Math.cos(yawRadians));
-  const right = new THREE.Vector3(Math.cos(yawRadians), 0, -Math.sin(yawRadians));
-  const move = new THREE.Vector3();
-  if (keys.has("KeyW")) move.add(forward);
-  if (keys.has("KeyS")) move.sub(forward);
-  if (keys.has("KeyD")) move.add(right);
-  if (keys.has("KeyA")) move.sub(right);
-  return move;
-}
-
 async function playAgentInputBuffer(frames, cameraYawDegrees, playbackMessage = null) {
   const actor = actorMeshes.get("rhea");
   if (!actor) return;
+
+  const signature = inputBufferSignature(frames, cameraYawDegrees);
+  driveSync.lastPlayedBufferSignature = signature;
+  driveSync.suppressBufferSignatureUntil = performance.now() + 5000;
+  driveSync.elapsed = 0;
   agentPlaybackActive = true;
+
   const yawRadians = THREE.MathUtils.degToRad(cameraYawDegrees);
   syncCameraYawForPlayback(yawRadians);
+
   try {
     for (const [index, frame] of frames.entries()) {
       const keys = new Set(frame.keys || []);
-      const durationMs = Math.max(60, Math.min(1200, Number(frame.duration_ms || 100)));
+      const durationMs = Math.max(1, Math.min(1200, Number(frame.duration_ms || 100)));
+
       if (playbackMessage) {
         setConsoleMessageText(
           playbackMessage,
-          `입력 재생 중 ${index + 1}/${frames.length}: ${(frame.keys || []).join("+") || "idle"} ${durationMs}ms`,
+          `입력 재생 중 ${index + 1}/${frames.length}: ${(frame.keys || []).join("+") || "idle"} ${Math.round(durationMs)}ms`,
         );
       }
+
       if (keys.has("KeyE")) {
         actor.userData.behavior = "inspect";
         audio.play("confirm", 0.5);
-        await delay(Math.max(180, durationMs));
+        await delay(Math.max(120, durationMs));
+        actor.userData.behavior = "idle";
         continue;
       }
+
       if (keys.has("Space")) startAgentJump(actor);
-      const stepMs = 50;
+
+      const isRunning = isRunningKeySet(keys);
+      const stepMs = 33.33;
       let elapsed = 0;
-      const startPos = actor.position.clone();
-      let lastPos = startPos.clone();
+      let lastTarget = actor.userData.targetPosition.clone();
       let stuckCheckTime = 0;
 
       while (elapsed < durationMs) {
-        const dt = Math.min(stepMs, durationMs - elapsed) / 1000;
+        const currentStepMs = Math.min(stepMs, durationMs - elapsed);
+        const dt = currentStepMs / 1000;
         const moved = moveActorWithKeys(actor, keys, dt, yawRadians);
-        
+
         if (moved) {
-          const isRunning = keys.has("Shift") || keys.has("ShiftLeft") || keys.has("ShiftRight");
           maybePlayFootstep(actor, dt, isRunning);
-          
-          // 충돌 및 끼임 감지 (0.8초간 이동이 미미하면 중단)
-          if (actor.position.distanceTo(lastPos) < 0.01) {
+          if (actor.userData.targetPosition.distanceTo(lastTarget) < 0.005) {
             stuckCheckTime += dt;
-            if (stuckCheckTime > 0.8) {
+            if (stuckCheckTime > 0.6) {
               if (playbackMessage) {
-                const currentText = playbackMessage.querySelector(".console-message-body").textContent;
-                setConsoleMessageText(playbackMessage, `${currentText} (벽 충돌 감지로 중단)`);
+                const currentText = playbackMessage.querySelector(".console-message-body")?.textContent || "입력 재생 중";
+                setConsoleMessageText(playbackMessage, `${currentText} (충돌 또는 정체 감지로 중단)`);
               }
-              return; // 전체 버퍼 중단
+              break;
             }
           } else {
             stuckCheckTime = 0;
-            lastPos.copy(actor.position);
+            lastTarget.copy(actor.userData.targetPosition);
           }
         }
 
-        elapsed += stepMs;
-        if (playbackMessage && elapsed % 200 === 0) {
+        elapsed += currentStepMs;
+        if (playbackMessage && Math.floor(elapsed / 200) !== Math.floor((elapsed - currentStepMs) / 200)) {
           const progress = Math.round((elapsed / durationMs) * 100);
           setConsoleMessageText(
             playbackMessage,
-            `입력 재생 중 ${index + 1}/${frames.length}: ${(frame.keys || []).join("+") || "idle"} (${progress}%)`
+            `입력 재생 중 ${index + 1}/${frames.length}: ${(frame.keys || []).join("+") || "idle"} (${progress}%)`,
           );
         }
-        await delay(stepMs);
+        await delay(currentStepMs);
       }
     }
   } finally {
-    // 이동 루프 종료 후, 시각적 위치를 논리적 위치와 강제로 일치시켜 누적 오차 제거
     actor.position.copy(actor.userData.targetPosition);
-    
-    // 매쉬가 완전히 정착하고 카메라가 안정화될 때까지 아주 짧게 대기
-    await delay(120);
-
+    await delay(80);
     agentPlaybackActive = false;
-    
-    // 이동 완료 후 최신 화면을 서버에 동기화하여 에이전트의 다음 턴 시야를 확보
-    const afterMovementScreenshot = captureSceneDataUrl();
+    actor.userData.behavior = "idle";
+    actor.userData.gait = "walk";
+    actor.userData.stepTimer = 0;
+    driveSync.localControlUntil = performance.now() + 300;
+
+    const afterMovementScreenshot = captureSceneDataUrl({
+      maxWidth: 512,
+      quality: 0.45,
+      mime: "image/jpeg",
+    });
     if (afterMovementScreenshot) {
-      fetch("/api/command", {
+      // /api/command 대신 /api/screenshot을 사용하여 불필요한 ADK turn 방지
+      fetch("/api/screenshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ command: "sync_screenshot", screenshot_data_url: afterMovementScreenshot }),
+        body: JSON.stringify({ screenshot_data_url: afterMovementScreenshot }),
       }).catch(() => {});
     }
 
     if (!hasMovementKeys()) {
-      actor.userData.behavior = "idle";
-      actor.userData.gait = "walk";
-      actor.userData.stepTimer = 0;
-      // 최종 위치를 서버에 즉시 전송
-      await syncDrive(actor, false, false, false);
+      sendDrivePayload(makeDrivePayload(new Set(), 1));
     }
   }
 }
@@ -1349,6 +1605,7 @@ async function playAgentInputBuffer(frames, cameraYawDegrees, playbackMessage = 
 function syncCameraYawForPlayback(yawRadians) {
   if (!Number.isFinite(yawRadians)) return;
   cameraControl.yaw = THREE.MathUtils.lerp(cameraControl.yaw, yawRadians, 0.65);
+  cameraControl.targetYaw = yawRadians;
 }
 
 function applyCameraCommand(command) {
@@ -1356,28 +1613,12 @@ function applyCameraCommand(command) {
   const pitchDelta = THREE.MathUtils.degToRad(Number(command.pitch_delta_degrees || 0));
   const rollDelta = THREE.MathUtils.degToRad(Number(command.roll_delta_degrees || 0));
   const zoomDelta = Number(command.zoom_delta || 0);
-  const targetYaw = cameraControl.yaw + yawDelta;
-  const targetPitch = THREE.MathUtils.clamp(cameraControl.pitch + pitchDelta, 0.22, 1.12);
-  const targetRoll = THREE.MathUtils.clamp(cameraControl.roll + rollDelta, -0.785, 0.785);
-  const targetDistance = THREE.MathUtils.clamp(cameraControl.distance + zoomDelta, 3.6, 11.5);
-  const steps = 12;
-  let step = 0;
-  const lerpFactor = 0.22;
-  function tick() {
-    step++;
-    cameraControl.yaw = THREE.MathUtils.lerp(cameraControl.yaw, targetYaw, lerpFactor);
-    cameraControl.pitch = THREE.MathUtils.lerp(cameraControl.pitch, targetPitch, lerpFactor);
-    cameraControl.roll = THREE.MathUtils.lerp(cameraControl.roll, targetRoll, lerpFactor);
-    cameraControl.distance = THREE.MathUtils.lerp(cameraControl.distance, targetDistance, lerpFactor);
-    if (step < steps) requestAnimationFrame(tick);
-    else {
-      cameraControl.yaw = targetYaw;
-      cameraControl.pitch = targetPitch;
-      cameraControl.roll = targetRoll;
-      cameraControl.distance = targetDistance;
-    }
-  }
-  requestAnimationFrame(tick);
+
+  // 현재 타겟값을 기준으로 새로운 목표 설정 (연속된 명령 처리용)
+  cameraControl.targetYaw += yawDelta;
+  cameraControl.targetPitch = THREE.MathUtils.clamp(cameraControl.targetPitch + pitchDelta, 0.05, 1.48);
+  cameraControl.targetRoll = THREE.MathUtils.clamp(cameraControl.targetRoll + rollDelta, -0.785, 0.785);
+  cameraControl.targetDistance = THREE.MathUtils.clamp(cameraControl.targetDistance + zoomDelta, 3.6, 11.5);
 }
 
 function startAgentJump(actor) {
@@ -1482,32 +1723,38 @@ function startJump() {
   actor.userData.behavior = "jump";
   actor.userData.jumpStartY = actor.position.y;
   audio.play("jump", 0.62);
-  syncDrive(actor, actor.userData.gait === "run", true, false);
+  sendDrivePayload(makeDrivePayload(pressedKeys, 1));
 }
 
 async function syncDrive(actor, running, jumping, moving = true) {
-  const payload = {
-    actor_id: "rhea",
-    x: Number(actor.userData.targetPosition.x.toFixed(2)),
-    z: Number(actor.userData.targetPosition.z.toFixed(2)),
-    facing_degrees: Number(THREE.MathUtils.radToDeg(actor.rotation.y).toFixed(1)),
-    gait: running ? "run" : "walk",
-    jumping,
-    moving,
-  };
-  const payloadKey = JSON.stringify(payload);
-  if (!jumping && !moving && payloadKey === driveSync.lastPayload) return;
-  if (driveSync.pending) {
-    driveSync.queuedPayload = payload;
-    return;
+  const shouldFlushMovement = moving || jumping || driveSync.elapsed >= 1 / 120;
+  if (shouldFlushMovement) {
+    return flushDriveInput(pressedKeys, { force: true });
   }
-  await sendDrivePayload(payload);
+  return sendDrivePayload(makeDrivePayload(pressedKeys, 1));
 }
 
 async function sendDrivePayload(payload) {
   const payloadKey = JSON.stringify(payload);
-  if (!payload.jumping && payloadKey === driveSync.lastPayload) return;
+  if (payloadKey === driveSync.lastPayload) return;
+
   driveSync.lastPayload = payloadKey;
+  driveSync.localControlUntil = performance.now() + 350;
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ type: "drive", ...payload }));
+      return;
+    } catch (error) {
+      console.warn("WebSocket drive send failed, falling back to HTTP", error);
+    }
+  }
+
+  if (driveSync.pending) {
+    driveSync.queuedPayload = payload;
+    return;
+  }
+
   driveSync.pending = true;
   try {
     await fetch("/api/drive", {
@@ -1525,8 +1772,30 @@ async function sendDrivePayload(payload) {
   }
 }
 
+function shouldPreserveActorRotation(actor) {
+  return actor === actorMeshes.get("rhea") && shouldKeepLocalPlayerPose();
+}
+
+function visualLocomotionState(actor) {
+  const visuallyMoving = actor.position.distanceTo(actor.userData.targetPosition) > 0.025;
+  if (actor.userData.behavior === "jump") return "jump";
+
+  if (actor.userData.behavior === "running" || actor.userData.behavior === "walking") {
+    return actor.userData.behavior === "running" ? "run" : "walk";
+  }
+
+  if (visuallyMoving) {
+    return actor.userData.gait === "run" ? "run" : "walk";
+  }
+
+  return "idle";
+}
+
 function animateActor(actor, elapsed, delta) {
-  actor.position.lerp(actor.userData.targetPosition, Math.min(1, delta * 8.5));
+  actor.position.lerp(actor.userData.targetPosition, Math.min(1, delta * 10.5));
+  if (Number.isFinite(actor.userData.targetFacingRadians) && !shouldPreserveActorRotation(actor)) {
+    actor.rotation.y = lerpAngle(actor.rotation.y, actor.userData.targetFacingRadians, Math.min(1, delta * 16));
+  }
   if (actor.userData.jumpElapsed > 0) {
     actor.userData.jumpElapsed += delta;
     const duration = 0.74;
@@ -1538,41 +1807,56 @@ function animateActor(actor, elapsed, delta) {
       actor.userData.jumpElapsed = 0;
       actor.position.y = 0;
       animateJumpPose(actor, 0);
-      actor.userData.behavior = hasMovementKeys() ? actor.userData.behavior : "idle";
-      actor.userData.gait = hasMovementKeys() ? actor.userData.gait : "walk";
+      if (!agentPlaybackActive) {
+        actor.userData.behavior = hasMovementKeys() ? actor.userData.behavior : "idle";
+        actor.userData.gait = hasMovementKeys() ? actor.userData.gait : "walk";
+      }
       if (actor === actorMeshes.get("rhea")) audio.play("land", 0.68);
-      if (actor === actorMeshes.get("rhea")) syncDrive(actor, false, false, hasMovementKeys());
+      if (actor === actorMeshes.get("rhea") && !agentPlaybackActive) {
+        syncDrive(actor, false, false, hasMovementKeys());
+      }
     }
   }
 
+  const visuallyMoving = actor.position.distanceTo(actor.userData.targetPosition) > 0.025;
+  const state = visualLocomotionState(actor);
+
   if (actor.userData.mixer) {
     actor.userData.mixer.update(delta);
-    const state = actor.userData.behavior === "jump"
-      ? "jump"
-      : actor.userData.behavior === "running"
-      ? "run"
-      : actor.userData.behavior === "walking"
-        ? "walk"
-        : "idle";
     setActorAction(actor, state);
+    
+    // GLTF 모델 발소리 재생
+    if (visuallyMoving && actor.userData.jumpElapsed <= 0) {
+      maybePlayFootstep(actor, delta, actor.userData.gait === "run");
+    }
     return;
   }
 
-  if (!actor.userData.usingFallback) return;
+  if (!actor.userData.usingFallback) {
+    // 이동 중일 때 발소리 재생 (에이전트 이동 포함)
+    if (visuallyMoving && actor.userData.jumpElapsed <= 0) {
+      maybePlayFootstep(actor, delta, actor.userData.gait === "run");
+    }
+    return;
+  }
 
   const fallbackRig = actor.userData.fallback?.userData;
   if (!fallbackRig?.armL || !fallbackRig?.armR || !fallbackRig?.legL || !fallbackRig?.legR) {
     return;
   }
 
-  const locomotion = actor.userData.behavior === "running" || actor.userData.behavior === "walking";
-  const speed = actor.userData.behavior === "running" ? 8 : 4;
+  const locomotion = state === "run" || state === "walk";
+  const speed = state === "run" ? 8 : 4;
   const swing = locomotion ? Math.sin(elapsed * speed) * 0.45 : 0;
   fallbackRig.armL.rotation.x = swing;
   fallbackRig.armR.rotation.x = -swing;
   fallbackRig.legL.rotation.x = -swing;
   fallbackRig.legR.rotation.x = swing;
   fallbackRig.armR.rotation.z = actor.userData.behavior === "wave" ? -1.35 : 0;
+
+  if (visuallyMoving && actor.userData.jumpElapsed <= 0) {
+    maybePlayFootstep(actor, delta, state === "run");
+  }
 }
 
 function animateJumpPose(actor, phase) {
@@ -1602,6 +1886,12 @@ function updateCamera(delta) {
     ? actor.position.clone().add(new THREE.Vector3(0, 1.18, 0))
     : new THREE.Vector3(-2.5, 1.1, 1.0);
   cameraControl.target.lerp(desiredTarget, Math.min(1, delta * 6));
+
+  const lerpFactor = Math.min(1, delta * 12.0);
+  cameraControl.yaw = THREE.MathUtils.lerp(cameraControl.yaw, cameraControl.targetYaw, lerpFactor);
+  cameraControl.pitch = THREE.MathUtils.lerp(cameraControl.pitch, cameraControl.targetPitch, lerpFactor);
+  cameraControl.roll = THREE.MathUtils.lerp(cameraControl.roll, cameraControl.targetRoll, lerpFactor);
+  cameraControl.distance = THREE.MathUtils.lerp(cameraControl.distance, cameraControl.targetDistance, lerpFactor);
 
   const radius = cameraControl.distance;
   const horizontal = Math.cos(cameraControl.pitch) * radius;
@@ -1664,12 +1954,49 @@ function createAudioBus() {
   };
 }
 
-function captureSceneDataUrl() {
+function captureSceneDataUrl(options = {}) {
   try {
-    renderer.render(scene, camera);
-    return renderer.domElement.toDataURL("image/png");
+    const maxWidth = options.maxWidth ?? 768;
+    const quality = options.quality ?? 0.55;
+    const mime = options.mime ?? "image/jpeg";
+
+    const source = renderer.domElement;
+    const sourceWidth = source.width;
+    const sourceHeight = source.height;
+    const scale = Math.min(1, maxWidth / sourceWidth);
+
+    const width = Math.max(1, Math.floor(sourceWidth * scale));
+    const height = Math.max(1, Math.floor(sourceHeight * scale));
+
+    const tempCanvas = document.createElement("canvas");
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+
+    const ctx = tempCanvas.getContext("2d");
+    if (!ctx) return null;
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "medium";
+    ctx.drawImage(source, 0, 0, width, height);
+
+    return tempCanvas.toDataURL(mime, quality);
   } catch {
     return null;
+  }
+}
+
+async function uploadScreenshot() {
+  try {
+    const dataUrl = captureSceneDataUrl();
+    if (!dataUrl) return;
+    
+    await fetch("/api/screenshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ screenshot_data_url: dataUrl }),
+    });
+  } catch (e) {
+    console.error("Failed to upload screenshot:", e);
   }
 }
 
@@ -1715,7 +2042,6 @@ function appendObservationResponse(event) {
     lines.push("최근 이벤트:");
     response.last_events.forEach((item) => lines.push(`- ${item.message}`));
   }
-  lines.push("이 관찰 내용이 Gemini에 tool response로 전달되었습니다.");
 
   return appendConsoleMessage("tool", lines.join("\n"), {
     label: `Tool Result · ${event.name}`,
@@ -1821,10 +2147,17 @@ function modelBadge(model, agentName = "") {
 
 function setConsoleMessageModel(message, model, agentName = "") {
   const label = message.querySelector(".console-message-label");
-  if (!label || label.querySelector(".model-badge")) return;
-  label.append(modelBadge(model, agentName));
-  
-  // 에이전트 이름에 따른 전용 색상 클래스 동적 추가
+  if (!label) return;
+
+  let badge = label.querySelector(".model-badge");
+  if (!badge) {
+    badge = modelBadge(model, agentName);
+    label.append(badge);
+  } else {
+    badge.textContent = agentName ? `${agentName} · ${model}` : model;
+  }
+
+  message.classList.remove("agent-supervisor", "agent-strategy", "agent-observer", "agent-actor");
   const agentClass = getAgentColorClass(agentName);
   if (agentClass) message.classList.add(agentClass);
 }
@@ -1832,6 +2165,12 @@ function setConsoleMessageModel(message, model, agentName = "") {
 function setConsoleMessageText(message, text) {
   const body = message.querySelector(".console-message-body");
   if (body) body.textContent = text;
+  scrollConsole();
+}
+
+function appendConsoleMessageText(message, text) {
+  const body = message.querySelector(".console-message-body");
+  if (body) body.textContent += text;
   scrollConsole();
 }
 

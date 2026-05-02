@@ -112,6 +112,7 @@ class Actor:
     gait: Gait = Gait.WALK
     facing_degrees: float = 0.0
     last_zone_id: str | None = None
+    last_teleport_tick: int = 0
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -129,12 +130,18 @@ class Actor:
 @dataclass(frozen=True)
 class WorldEvent:
     tick: int
+    timestamp: float
     message: str
     severity: str = "info"
     data: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        event = {"tick": self.tick, "message": self.message, "severity": self.severity}
+        event = {
+            "tick": self.tick,
+            "timestamp": self.timestamp,
+            "message": self.message,
+            "severity": self.severity,
+        }
         if self.data is not None:
             event["data"] = self.data
         return event
@@ -153,6 +160,8 @@ class WorldState:
     flags: dict[str, bool] = field(default_factory=dict)
     inventory: list[str] = field(default_factory=list)
     events: list[WorldEvent] = field(default_factory=list)
+    agent_memory: dict[str, Any] = field(default_factory=dict)
+    last_input_buffer: dict[str, Any] | None = None
 
     def visible_goals(self) -> list[str]:
         goals: list[str] = []
@@ -164,7 +173,9 @@ class WorldState:
         return goals
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        # 최신 이벤트를 상단에 배치하고 최대 30개까지 노출
+        sorted_events = sorted(self.events, key=lambda e: e.timestamp, reverse=True)
+        data = {
             "scenario_id": self.scenario_id,
             "display_name": self.display_name,
             "design_intent": self.design_intent,
@@ -176,5 +187,9 @@ class WorldState:
             "flags": self.flags,
             "inventory": list(self.inventory),
             "goals": self.visible_goals(),
-            "events": [event.as_dict() for event in self.events[-10:]],
+            "events": [event.as_dict() for event in sorted_events[:30]],
+            "agent_memory": self.agent_memory,
         }
+        if self.last_input_buffer:
+            data["last_input_buffer"] = self.last_input_buffer
+        return data

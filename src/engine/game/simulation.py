@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from math import atan2, cos, degrees, radians, sin
 from random import Random
@@ -78,9 +79,66 @@ class RuntimeSimulator:
         return self.state.as_dict()
 
     def inspect(self) -> dict[str, Any]:
-        return self.state.as_dict()
+        data = self.state.as_dict()
+        data["current_time"] = time.time()
+        return data
 
-    def move_actor(self, actor_id: str, zone_id: str, gait: Gait = Gait.WALK) -> CommandResult:
+    def diagnose(self) -> dict[str, Any]:
+        """에이전트가 기술적인 문제를 분석할 수 있도록 내부 상태 상세 데이터를 반환합니다."""
+        return {
+            "tick": self.state.tick,
+            "status": self.state.status.value,
+            "flags": self.state.flags,
+            "inventory": self.state.inventory,
+            "puzzle": {
+                "phase": self.puzzle_phase,
+                "input_index": self.puzzle_input_index,
+                "sequence_length": len(self.puzzle_sequence),
+            },
+            "timestamp": time.time(),
+        }
+
+    def save_agent_memory(self, key: str, value: Any, source: str = "agent") -> CommandResult:
+        """에이전트의 작업 기억을 시뮬레이션 상태에 저장합니다."""
+        self.state.agent_memory[key] = {
+            "value": value,
+            "source": source,
+            "tick": self.state.tick,
+            "timestamp": time.time(),
+        }
+        self._event(f"작업 기억을 저장했습니다: {key}")
+        return CommandResult(
+            True,
+            f"작업 기억 저장 완료: {key}",
+            {
+                "memory_key": key,
+                "source": source,
+                "tick": self.state.tick,
+            },
+        )
+
+    def load_agent_memory(self, key: str | None = None) -> CommandResult:
+        """저장된 에이전트 작업 기억을 불러옵니다."""
+        memory = {key: self.state.agent_memory.get(key)} if key else dict(self.state.agent_memory)
+        return CommandResult(
+            True,
+            "작업 기억 조회 완료",
+            {
+                "agent_memory_result": memory,
+                "tick": self.state.tick,
+            },
+        )
+
+    def clear_agent_memory(self) -> CommandResult:
+        """에이전트의 작업 기억을 모두 삭제합니다."""
+        self.state.agent_memory.clear()
+        self._event("작업 기억을 초기화했습니다.")
+        return CommandResult(True, "작업 기억 초기화 완료", self.state.as_dict())
+
+
+    def move_actor(
+        self, actor_id: str, zone_id: str, gait: Gait = Gait.WALK
+    ) -> CommandResult:
         actor = self.state.actors.get(actor_id)
         zone = self.state.zones.get(zone_id)
         if actor is None:
@@ -91,24 +149,32 @@ class RuntimeSimulator:
         previous = actor.position
         target = _zone_navigation_target(zone_id, zone.center)
         if self._blocked(target):
-            return self._failure(f"{zone.display_name}까지 가는 길이 충돌 지형에 막혀 있습니다.")
+            return self._failure(
+                f"{zone.display_name}까지 가는 길이 충돌 지형에 막혀 있습니다."
+            )
 
         actor.position = target
         actor.gait = gait
-        actor.behavior = ActorBehavior.RUNNING if gait is Gait.RUN else ActorBehavior.WALKING
+        actor.behavior = (
+            ActorBehavior.RUNNING if gait is Gait.RUN else ActorBehavior.WALKING
+        )
         actor.facing_degrees = _facing_degrees(previous, zone.center)
         actor.last_zone_id = zone.zone_id
         self.state.tick += 1
         self.state.status = ScenarioStatus.RUNNING
         gait_text = "달려서" if gait is Gait.RUN else "걸어서"
-        self._event(f"{actor.display_name}가 {zone.display_name}까지 {gait_text} 이동했습니다.")
+        self._event(
+            f"{actor.display_name}가 {zone.display_name}까지 {gait_text} 이동했습니다."
+        )
         return CommandResult(
             True,
             f"{actor.display_name}가 {zone.display_name}까지 이동했습니다.",
             self.state.as_dict(),
         )
 
-    def perform_action(self, actor_id: str, behavior: ActorBehavior) -> CommandResult:
+    def perform_action(
+        self, actor_id: str, behavior: ActorBehavior
+    ) -> CommandResult:
         actor = self.state.actors.get(actor_id)
         if actor is None:
             return self._failure(f"알 수 없는 캐릭터입니다: {actor_id}")
@@ -123,14 +189,17 @@ class RuntimeSimulator:
 
         current_zone = self._current_zone(actor)
         if current_zone is None:
-            return self._failure(f"{actor.display_name}가 상호작용 영역 안에 있지 않습니다.")
+            return self._failure(
+                f"{actor.display_name}가 상호작용 영역 안에 있지 않습니다."
+            )
         if (
             current_zone.required_behavior is not None
             and current_zone.required_behavior is not behavior
         ):
             expected = current_zone.required_behavior.value
             return self._failure(
-                f"{current_zone.display_name}에는 '{expected}' 행동이 필요하지만 '{behavior.value}'가 입력되었습니다."
+                f"{current_zone.display_name}에는 '{expected}' 행동이 필요하지만 "
+                f"'{behavior.value}'가 입력되었습니다."
             )
 
         actor.behavior = behavior
@@ -138,7 +207,8 @@ class RuntimeSimulator:
         if current_zone.success_flag is not None:
             self.state.flags[current_zone.success_flag] = True
         self._event(
-            f"{actor.display_name}가 {current_zone.display_name}에서 {behavior.value} 행동을 했습니다."
+            f"{actor.display_name}가 {current_zone.display_name}에서 "
+            f"{behavior.value} 행동을 했습니다."
         )
         self._refresh_status()
         return CommandResult(
@@ -150,57 +220,55 @@ class RuntimeSimulator:
     def drive_actor(
         self,
         actor_id: str,
-        x: float,
-        z: float,
-        facing_degrees: float,
-        gait: Gait = Gait.WALK,
-        jumping: bool = False,
-        moving: bool = True,
+        keys: list[str],
+        camera_yaw_degrees: float,
+        duration_ms: float = 100.0,
     ) -> CommandResult:
         actor = self.state.actors.get(actor_id)
         if actor is None:
             return self._failure(f"알 수 없는 캐릭터입니다: {actor_id}")
 
-        candidate = Vec3(
-            _clamp(x, -WORLD_X_LIMIT, WORLD_X_LIMIT),
-            0.0,
-            _clamp(z, -WORLD_Z_LIMIT, WORLD_Z_LIMIT),
-        )
-        blocked_by = self._blocking_obstacle(candidate)
-        if blocked_by is not None:
-            actor.behavior = ActorBehavior.JUMP if jumping else ActorBehavior.IDLE
-            actor.facing_degrees = facing_degrees
-            self.state.tick += 1
-            self.state.status = ScenarioStatus.RUNNING
-            self._event(
-                f"{actor.display_name}가 {blocked_by.display_name}에 막혔습니다.", "warning"
+        keys_set = set(keys)
+        dt_seconds = duration_ms / 1000.0
+        
+        # 고정된 델타 타임(약 33ms)으로 스텝을 나누어 정밀도 유지
+        step_ms = 33.33
+        step_count = max(1, int(duration_ms / step_ms))
+        step_seconds = dt_seconds / step_count
+        
+        for _ in range(step_count):
+            next_pos = self._next_position_from_keys(
+                actor.position, keys_set, step_seconds, camera_yaw_degrees
             )
-            return CommandResult(
-                True,
-                f"{actor.display_name} 이동 중 {blocked_by.display_name} 충돌로 막혔습니다.",
-                self.state.as_dict(),
-                degraded=True,
-            )
+            if next_pos == actor.position:
+                continue
+            blocked_by = self._blocking_obstacle(next_pos)
+            if blocked_by is not None:
+                break
+            actor.position = next_pos
 
-        actor.position = candidate
-        actor.gait = gait
-        actor.behavior = (
-            ActorBehavior.JUMP
-            if jumping
-            else (
-                ActorBehavior.RUNNING
-                if moving and gait is Gait.RUN
-                else ActorBehavior.WALKING if moving else ActorBehavior.IDLE
-            )
-        )
-        actor.facing_degrees = facing_degrees
-        current_zone = self._current_zone(actor)
-        actor.last_zone_id = current_zone.zone_id if current_zone is not None else None
+        # 이동 키가 눌려있을 때만 회전 방향을 업데이트함 (Idle 시에는 현재 방향 유지)
+        move_x, move_z = _movement_axis(keys_set, camera_yaw_degrees)
+        if move_x != 0.0 or move_z != 0.0:
+            actor.facing_degrees = degrees(atan2(move_x, move_z))
+        
+        is_running = _running(keys_set)
+        is_jumping = "Space" in keys_set
+        mag = 1.0 if move_x != 0.0 or move_z != 0.0 else 0.0
+        
+        # 동작 상태 결정 우선순위: 점프 > 달리기 > 걷기 > 대기
+        if is_jumping:
+            actor.behavior = ActorBehavior.JUMP
+        elif mag > 0:
+            actor.behavior = ActorBehavior.RUNNING if is_running else ActorBehavior.WALKING
+        else:
+            actor.behavior = ActorBehavior.IDLE
+            
+        actor.gait = Gait.RUN if is_running else Gait.WALK
+        
         self.state.tick += 1
         self.state.status = ScenarioStatus.RUNNING
-        return CommandResult(
-            True, f"{actor.display_name}를 입력 방향으로 이동했습니다.", self.state.as_dict()
-        )
+        return CommandResult(True, "이동 처리 완료", self.state.as_dict())
 
     def apply_input_buffer(
         self,
@@ -211,19 +279,21 @@ class RuntimeSimulator:
         actor = self.state.actors.get(actor_id)
         if actor is None:
             return self._failure(f"알 수 없는 캐릭터입니다: {actor_id}")
-        if not frames:
-            return self._failure("입력 버퍼가 비어 있습니다.")
+        self.state.last_input_buffer = {
+            "actor_id": actor_id,
+            "frames": frames,
+            "camera_yaw_degrees": camera_yaw_degrees,
+            "timestamp": time.time(),
+        }
 
         accepted_frames = 0
         blocked_frames = 0
         last_frame_was_locomotion = False
         for frame in frames[:80]:
             keys = {str(key) for key in frame.get("keys", [])}
-            duration_ms = int(frame.get("duration_ms", 100))
+            duration_ms = float(frame.get("duration_ms", 100.0))
             if duration_ms <= 0:
                 continue
-            if duration_ms > 1200:
-                duration_ms = 1200
 
             if "KeyE" in keys:
                 self._perform_context_action(actor)
@@ -231,8 +301,10 @@ class RuntimeSimulator:
                 last_frame_was_locomotion = False
                 continue
 
-            step_count = max(1, duration_ms // 80)
-            step_seconds = duration_ms / 1000.0 / step_count
+            # 고정된 델타 타임(약 33ms)을 기준으로 스텝을 나누어 정밀도 유지
+            step_ms = 33.33
+            step_count = max(1, int(duration_ms / step_ms))
+            step_seconds = (duration_ms / 1000.0) / step_count
             moved_this_frame = False
             for _ in range(step_count):
                 candidate = self._next_position_from_keys(
@@ -278,10 +350,16 @@ class RuntimeSimulator:
         )
 
     def _current_zone(self, actor: Actor) -> Zone | None:
+        nearest_zone = None
+        min_distance = float("inf")
+        
         for zone in self.state.zones.values():
-            if zone.contains(actor.position):
-                return zone
-        return None
+            dist = zone.center.distance_to(actor.position)
+            if dist <= zone.radius:
+                if dist < min_distance:
+                    min_distance = dist
+                    nearest_zone = zone
+        return nearest_zone
 
     def _blocked(self, position: Vec3) -> bool:
         return self._blocking_obstacle(position) is not None
@@ -302,7 +380,8 @@ class RuntimeSimulator:
         move_x, move_z = _movement_axis(keys, camera_yaw_degrees)
         if move_x == 0.0 and move_z == 0.0:
             return position
-        speed = 4.8 if _running(keys) else 2.45
+        # 클라이언트(main.js)와 속도값 동기화 (7.5 / 3.8)
+        speed = 7.5 if _running(keys) else 3.8
         return Vec3(
             _clamp(position.x + move_x * speed * step_seconds, -WORLD_X_LIMIT, WORLD_X_LIMIT),
             0.0,
@@ -448,12 +527,24 @@ class RuntimeSimulator:
         if self.state.flags.get("puzzle_solved", False):
             self._event("기억 퍼즐 게이트는 이미 열려 있습니다.")
             return
+        
         actor.behavior = ActorBehavior.INSPECT
-        self.puzzle_phase = 1
+        
+        # 이미 퍼즐이 진행 중인 상태에서 다시 누르면 처음(Phase 1)부터 다시 시작하도록 리셋
+        if self.puzzle_phase > 0:
+            self._event("기억 퍼즐을 처음부터 다시 시작합니다.")
+            self.puzzle_phase = 1
+        else:
+            self.puzzle_phase = 1
+        
         self.puzzle_input_index = 0
-        self._clear_puzzle_flags()
+        
+        # 퍼즐 진행 상태 플래그 초기화 (눌린 패드 효과 등)
+        for pad_id in SIMON_PADS:
+            self.state.flags[pad_id] = False
+        
         self.state.flags["puzzle_ready"] = True
-        self._puzzle_cue_event(self.puzzle_sequence[:1])
+        self._puzzle_cue_event(self.puzzle_sequence[: self.puzzle_phase])
 
     def _handle_puzzle_pad(self, actor: Actor, zone: Zone) -> None:
         if self.puzzle_phase == 0:
@@ -519,6 +610,7 @@ class RuntimeSimulator:
 
         self.state.flags["maze_escaped"] = True
         actor.position = SPAWN_POSITION
+        actor.last_teleport_tick = self.state.tick
         actor.behavior = ActorBehavior.WAVE
         self._event(
             f"{actor.display_name}가 미로를 완벽하게 탈출했습니다!",
@@ -577,7 +669,9 @@ class RuntimeSimulator:
         severity: str = "info",
         data: dict[str, Any] | None = None,
     ) -> None:
-        self.state.events.append(WorldEvent(self.state.tick, message, severity, data))
+        self.state.events.append(
+            WorldEvent(self.state.tick, time.time(), message, severity, data)
+        )
 
     def _failure(self, message: str) -> CommandResult:
         self.state.tick += 1
@@ -944,7 +1038,7 @@ def build_signal_market_state() -> WorldState:
         "puzzle_solved": False,
         **{flag: False for flag in QUEST_FLAGS},
     }
-    state.events = [WorldEvent(0, "Agent Playtest Lab을 불러왔습니다.")]
+    state.events = [WorldEvent(0, time.time(), "Agent Playtest Lab을 불러왔습니다.")]
     return state
 
 

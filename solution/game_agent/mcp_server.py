@@ -4,6 +4,7 @@ from urllib import request
 from urllib.error import URLError
 import json
 import os
+import sys
 from typing import Any
 
 from mcp.server.fastmcp import FastMCP
@@ -12,9 +13,10 @@ from mcp import types
 from engine.game.game_observation import agent_visible_state
 import logging
 
-# MCP INFO 로그 억제
+logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
 logging.getLogger("mcp").setLevel(logging.WARNING)
-logging.getLogger("mcp.server").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logger = logging.getLogger(__name__)
 logging.getLogger("fastmcp").setLevel(logging.WARNING)
 
 
@@ -28,27 +30,43 @@ mcp = FastMCP(
     json_response=True,
 )
 
-# 에이전트의 작업 기억을 보관하기 위한 전역 변수
-_agent_working_memory: str = "미로 탈출 및 NPC 퀘스트 수행 중. 기록된 세부 기억 없음."
+
+@mcp.tool()
+def save_memory(key: str, value: Any, source: str = "agent") -> dict[str, Any]:
+    """판단, 이동 경로, 발견 사실 등 중요 정보를 런타임 작업 기억에 저장합니다."""
+    runtime_result = _runtime_post(
+        "/api/agent-memory/save",
+        {
+            "key": key,
+            "value": value,
+            "source": source,
+        },
+    )
+    if runtime_result is not None:
+        return runtime_result
+    return {
+        "ok": False,
+        "msg": "Engine connection failed.",
+        "source": "runtime_http_unavailable",
+        "degraded": True,
+    }
 
 
 @mcp.tool()
-def save_memory(insight: str) -> str:
-    """판단, 이동 경로, 발견 사실 등 중요 정보를 작업 기억에 저장.
-    load_memory를 통해 정보 확인 가능.
-    """
-    global _agent_working_memory
-    _agent_working_memory = insight
-    return "기억 저장 성공."
-
-
-@mcp.tool()
-def load_memory() -> str:
-    """저장된 작업 기억 불러오기.
-    이전 계획이나 실패 경로 복기 시 사용.
-    """
-    global _agent_working_memory
-    return f"보관된 기억: {_agent_working_memory}"
+def load_memory(key: str | None = None) -> dict[str, Any]:
+    """런타임 작업 기억을 불러옵니다."""
+    runtime_result = _runtime_post(
+        "/api/agent-memory/load",
+        {"key": key},
+    )
+    if runtime_result is not None:
+        return runtime_result
+    return {
+        "ok": False,
+        "msg": "Engine connection failed.",
+        "source": "runtime_http_unavailable",
+        "degraded": True,
+    }
 
 
 @mcp.tool()
@@ -65,67 +83,170 @@ def diagnose_engine_state() -> dict[str, Any]:
         }
     return {
         "ok": False,
-        "message": "진단 정보 획득 실패. 엔진 통신 상태 확인 필요."
+        "msg": "진단 정보 획득 실패. 엔진 통신 상태 확인 필요."
+    }
+
+
+_tool_budgets = {
+    "inspect_game_state": 1,
+    "capture_visual_observation": 1,
+    "capture_visual_crop": 2,
+}
+_tool_counts = {}
+_tool_cache = {}
+
+def _claim_budget(tool_name: str) -> dict[str, Any] | None:
+    limit = _tool_budgets.get(tool_name, 999)
+    count = _tool_counts.get(tool_name, 0)
+    if count >= limit:
+        return {
+            "ok": True,
+            "budget_exhausted": True,
+            "duplicate_request": True,
+            "message": (
+                f"{tool_name} 예산이 이미 소진되었습니다. 이번 턴에는 추가 관측이 불가합니다. "
+                "이미 제공된 cached_result를 요약하고 즉시 observer 턴을 종료하십시오. "
+                "절대로 같은 도구를 반복 호출하지 마십시오."
+            ),
+            "observation_complete": True,
+            "must_finalize_observation": True,
+            "cached_result": _tool_cache.get(tool_name)
+        }
+    _tool_counts[tool_name] = count + 1
+    return None
+
+def _reset_tool_budgets():
+    global _tool_counts, _tool_cache
+    _tool_counts.clear()
+    _tool_cache.clear()
+
+@mcp.tool()
+def capture_visual_observation(reason: str = "visual QA") -> types.ImageContent | dict[str, Any]:
+    """시각 검증이 꼭 필요한 경우에만 현재 화면을 캡처합니다.
+    사용자 메시지에 이미 이미지가 포함되어 있다면 가급적 호출하지 마십시오.
+    """
+    budget_error = _claim_budget("capture_visual_observation")
+    if budget_error:
+        return budget_error
+
+    runtime_capture = _runtime_get("/api/capture")
+    if runtime_capture and runtime_capture.get("screenshot"):
+        screenshot_url = runtime_capture.get("screenshot")
+        if "," in screenshot_url:
+            fmt, b64_data = screenshot_url.split(",", 1)
+            mime = fmt.split(":")[1].split(";")[0]
+            result = f"Full screen captured for: {reason}"
+            _tool_cache["capture_visual_observation"] = result
+            return types.ImageContent(
+                type="image",
+                data=b64_data,
+                mimeType=mime,
+            )
+
+    return {
+        "ok": False,
+        "message": "시각 캡처 실패 또는 브라우저 클라이언트 없음",
     }
 
 
 @mcp.tool()
-def inspect_game_state(include_screenshot: bool = True) -> types.TextContent | list[types.TextContent | types.ImageContent]:
-    """현재 게임 월드 상태 정보 조회.
-    캐릭터 위치, 주변 장애물, 퀘스트 진행 상황 포함.
-    시각 확인 필요 시에만 include_screenshot=True 사용 (TPM 절약).
+def capture_visual_crop(
+    reason: str,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+) -> types.ImageContent | dict[str, Any]:
+    """특정 영역(x, y, width, height)만 집중적으로 관측합니다. 
+    작은 물체나 퍼즐 텍스트를 정밀하게 확인해야 할 때 사용하십시오.
     """
-    runtime_state = _runtime_get("/api/state")
-    if runtime_state is not None:
-        state_data = runtime_state.get("state", {})
-        landmarks = state_data.get("visible_landmarks", [])
-        nav_guides = []
-        for lm in landmarks:
-            name = lm.get("name", "Unknown")
-            dist = lm.get("distance_label", "unknown")
-            rel_x = lm.get("relative_x", 0)
-            rel_z = lm.get("relative_z", 0)
-            
-            direction = []
-            if rel_z < -1: direction.append("North")
-            elif rel_z > 1: direction.append("South")
-            if rel_x < -1: direction.append("West")
-            elif rel_x > 1: direction.append("East")
-            nav_guides.append(f"- {name}: {"-".join(direction) or "center"} ({dist})")
-        
-        guide_text = "\n".join(nav_guides) if nav_guides else "No landmarks visible."
+    budget_error = _claim_budget("capture_visual_crop")
+    if budget_error:
+        return budget_error
 
-        state_json = json.dumps(
-            {"ok": True, "state": agent_visible_state(state_data)},
-            ensure_ascii=False
-        )
-        content: list[types.TextContent | types.ImageContent] = [
-            types.TextContent(
-                type="text",
-                text=f"State JSON: {state_json}\nLandmarks: {guide_text}"
+    runtime_capture = _runtime_get("/api/capture")
+    if runtime_capture and runtime_capture.get("screenshot"):
+        screenshot_url = runtime_capture.get("screenshot")
+        if "," in screenshot_url:
+            fmt, b64_data = screenshot_url.split(",", 1)
+            mime = fmt.split(":")[1].split(";")[0]
+            result = f"Crop at ({x},{y}) captured for: {reason}"
+            _tool_cache["capture_visual_crop"] = result
+            return types.ImageContent(
+                type="image",
+                data=b64_data,
+                mimeType=mime,
             )
-        ]
-        
-        if include_screenshot:
-            screenshot_url = runtime_state.get("screenshot")
-            if screenshot_url and "," in screenshot_url:
-                try:
-                    fmt, b64_data = screenshot_url.split(",", 1)
-                    mime = fmt.split(":")[1].split(";")[0]
-                    content.append(types.ImageContent(
-                        type="image",
-                        data=b64_data,
-                        mimeType=mime
-                    ))
-                except Exception:
-                    pass
-                
-        return content
 
-    return types.TextContent(
-        type="text",
-        text=json.dumps({"ok": False, "msg": "Engine connection failed."}, ensure_ascii=False)
-    )
+    return {
+        "ok": False,
+        "message": "영역 캡처 실패",
+    }
+
+
+@mcp.tool()
+def inspect_game_state() -> dict[str, Any]:
+    """현재 게임 월드의 구조화된 상태(좌표, 주변 장애물, 랜드마크, 퀘스트 상태 등)를 조회합니다.
+    이미지는 절대 포함하지 않으며 순수 상태 데이터만 반환합니다.
+    """
+    budget_error = _claim_budget("inspect_game_state")
+    if budget_error:
+        return budget_error
+
+    runtime_state = _runtime_get("/api/state")
+    if runtime_state is None:
+        return {
+            "ok": False,
+            "message": "Engine connection failed.",
+            "observation_complete": True,
+            "must_finalize_observation": True,
+        }
+
+    raw_state = runtime_state.get("state", {})
+    state_data = agent_visible_state(raw_state)
+    player = state_data.get("player", {})
+    raw_camera = raw_state.get("camera", {})
+    nav = state_data.get("navigation_observation", {})
+
+    summary = {
+        "pos": player.get("debug_position"),
+        "facing": player.get("facing"),
+        "camera_yaw_degrees": raw_camera.get("yaw_degrees", 0.0),
+        "nearby": player.get("nearby_interaction"),
+        "npcs": state_data.get("npcs", []),
+        "navigation_observation": {
+            "visible_landmarks": nav.get("visible_landmarks", [])[:5],
+            "local_clearance": nav.get("local_clearance"),
+            "far_clearance": nav.get("far_clearance"),
+            "maze_corridors": nav.get("maze_corridors"),
+        },
+        "goals": state_data.get("goals"),
+        "flags": state_data.get("flags"),
+        "recent_events": [e["message"] for e in state_data.get("events", [])[-3:]],
+    }
+
+    result = {
+        "ok": True,
+        "message": (
+            "상태 관찰 완료. observer_agent는 이 결과를 요약하고 "
+            "추가 inspect_game_state 호출 없이 즉시 observer 턴을 종료해야 합니다."
+        ),
+        "observation_complete": True,
+        "must_finalize_observation": True,
+        "player": {
+            **player,
+            "debug_position": summary["pos"],
+            "nearby_interaction": summary["nearby"],
+        },
+        "camera_yaw_degrees": summary["camera_yaw_degrees"],
+        "navigation_observation": summary["navigation_observation"],
+        "flags": summary["flags"],
+        "goals": summary["goals"],
+        "recent_events": summary["recent_events"],
+        "summary": summary,
+    }
+    _tool_cache["inspect_game_state"] = result
+    return result
 
 
 @mcp.tool()
@@ -135,12 +256,15 @@ def apply_input_buffer(
     camera_yaw_degrees: float = 0.0,
 ) -> dict[str, Any]:
     """일련의 입력 프레임(WASD, Shift, Space, E)을 전송하여 캐릭터를 조작합니다.
-    [중요] 캐릭터 이동은 카메라 시점을 기준으로 결정됩니다.
+    - [중요] 캐릭터 이동은 카메라 시점을 기준으로 결정됩니다.
+    - [정밀도] duration_ms는 물리 계산 결과에 따라 소수점 단위로 입력할 수 있습니다.
+    - [예시] frames: [{"keys": ["KeyW"], "duration_ms": 1245.5}, {"keys": ["KeyD"], "duration_ms": 450.0}]
     """
     normalized_actor_id = _normalize_actor_id(actor_id)
     if normalized_actor_id != "rhea":
         return {"ok": False, "msg": "Only 'rhea' can be controlled."}
 
+    _reset_tool_budgets()
     runtime_result = _runtime_post(
         "/api/input-buffer",
         {
@@ -149,11 +273,9 @@ def apply_input_buffer(
             "camera_yaw_degrees": camera_yaw_degrees,
         },
     )
+
     if runtime_result is not None:
-        return {
-            "ok": True,
-            "state": agent_visible_state(runtime_result.get("state", {}))
-        }
+        return runtime_result
 
     return {"ok": False, "msg": "Engine connection failed."}
 
@@ -176,6 +298,7 @@ def adjust_camera_view(
       * 거리 범위: 3.6 ~ 11.5 unit.
     """
 
+    _reset_tool_budgets()
     runtime_result = _runtime_post(
         "/api/camera-control",
         {
@@ -189,7 +312,7 @@ def adjust_camera_view(
         return runtime_result
     return {
         "ok": False,
-        "message": "게임 런타임에 접속할 수 없습니다. 카메라 뷰를 변경하지 못했습니다.",
+        "msg": "Engine connection failed.",
         "source": "runtime_http_unavailable",
         "degraded": True,
     }

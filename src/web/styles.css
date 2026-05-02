@@ -349,6 +349,7 @@ kbd {
     rgba(8, 13, 19, 0.98);
   box-shadow: 0 24px 72px rgba(0, 0, 0, 0.54);
   overflow: hidden;
+  backdrop-filter: blur(14px);
 }
 
 #console.open {
@@ -375,7 +376,7 @@ kbd {
   gap: 8px;
 }
 
-/* Maximized Console Mode */
+/* Maximized Console Mode - Performance Optimization */
 body.console-maximized #console {
   width: 100vw;
   height: 100vh;
@@ -385,6 +386,9 @@ body.console-maximized #console {
   border: 0;
   border-radius: 0;
   z-index: 1000;
+  /* 최대화 시 깜빡임 유발 요소 제거 */
+  backdrop-filter: none;
+  background: #0d141d; 
 }
 
 body.console-maximized #consoleLog {
@@ -402,7 +406,13 @@ body.console-maximized #scene {
   border: 2px solid rgba(108, 194, 255, 0.5);
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
   pointer-events: auto;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  /* all 대신 필요한 속성만 트랜지션하여 깜빡임 억제 */
+  transition: 
+    width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 0.3s ease;
   display: block !important;
   overflow: hidden !important;
 }
