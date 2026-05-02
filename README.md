@@ -410,9 +410,9 @@ INFO:     Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
 
 > [!TIP]
 > **Google Cloud Shell 사용자를 위한 팁**
-> Cloud Shell 환경에서는 프록시 보안 정책으로 인해 웹 인터페이스 접근 시 `403 Forbidden` 에러가 발생할 수 있습니다. 이 경우 아래와 같이 `--allowed_origins` 옵션에 본인의 Cloud Shell 웹 미리보기 URL을 추가하여 실행해 보세요.
+> Cloud Shell 환경에서는 프록시 보안 정책으로 인해 웹 인터페이스 접근 시 `403 Forbidden` 에러가 발생할 수 있습니다. 이 경우 아래와 같이 `--host 0.0.0.0`과 `--allowed_origins` 옵션을 함께 사용하여 실행해 보세요.
 > ```bash
-> adk web handson/ --allowed_origins "https://8000-cs-..."
+> adk web handson/ --host 0.0.0.0 --allowed_origins "https://8000-cs-..."
 > ```
 > 또한 8787 포트(게임 엔진)와 8000 포트(ADK Web) 모두가 미리보기로 열려 있어야 실시간 데이터 통신이 원활하게 작동합니다.
 
