@@ -1,5 +1,9 @@
 <h1 align="center">Agentic Game Lab</h1>
 
+> [!TIP]
+> 본 실습의 배경과 상세 이론이 담긴 발표 자료를 함께 확인해 보세요.
+> - **발표 자료**: [Google Slides](https://docs.google.com/presentation/d/1ye2jJJvkK9n82YNF23Q1OwZqBn_8uawknZrPXY3alOk/edit?usp=sharing)
+
 이 실습에서는 Google ADK와 Gemini API를 사용해 3D 게임 속 태스크를 해결하는 AI 에이전트를 함께 만들어 보려 합니다. 에이전트가 캐릭터의 위치 데이터를 직접 읽는 방식이 아니라, 사람이 게임을 하듯 화면과 텍스트 정보만으로 스스로 판단하고 움직이게 만드는 것이 목표입니다.
 
 그럼 실습을 통해 어떤 것들을 얻을 수 있을지 하나씩 살펴볼까요?
