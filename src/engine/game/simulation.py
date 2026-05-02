@@ -135,10 +135,7 @@ class RuntimeSimulator:
         self._event("작업 기억을 초기화했습니다.")
         return CommandResult(True, "작업 기억 초기화 완료", self.state.as_dict())
 
-
-    def move_actor(
-        self, actor_id: str, zone_id: str, gait: Gait = Gait.WALK
-    ) -> CommandResult:
+    def move_actor(self, actor_id: str, zone_id: str, gait: Gait = Gait.WALK) -> CommandResult:
         actor = self.state.actors.get(actor_id)
         zone = self.state.zones.get(zone_id)
         if actor is None:
@@ -149,32 +146,24 @@ class RuntimeSimulator:
         previous = actor.position
         target = _zone_navigation_target(zone_id, zone.center)
         if self._blocked(target):
-            return self._failure(
-                f"{zone.display_name}까지 가는 길이 충돌 지형에 막혀 있습니다."
-            )
+            return self._failure(f"{zone.display_name}까지 가는 길이 충돌 지형에 막혀 있습니다.")
 
         actor.position = target
         actor.gait = gait
-        actor.behavior = (
-            ActorBehavior.RUNNING if gait is Gait.RUN else ActorBehavior.WALKING
-        )
+        actor.behavior = ActorBehavior.RUNNING if gait is Gait.RUN else ActorBehavior.WALKING
         actor.facing_degrees = _facing_degrees(previous, zone.center)
         actor.last_zone_id = zone.zone_id
         self.state.tick += 1
         self.state.status = ScenarioStatus.RUNNING
         gait_text = "달려서" if gait is Gait.RUN else "걸어서"
-        self._event(
-            f"{actor.display_name}가 {zone.display_name}까지 {gait_text} 이동했습니다."
-        )
+        self._event(f"{actor.display_name}가 {zone.display_name}까지 {gait_text} 이동했습니다.")
         return CommandResult(
             True,
             f"{actor.display_name}가 {zone.display_name}까지 이동했습니다.",
             self.state.as_dict(),
         )
 
-    def perform_action(
-        self, actor_id: str, behavior: ActorBehavior
-    ) -> CommandResult:
+    def perform_action(self, actor_id: str, behavior: ActorBehavior) -> CommandResult:
         actor = self.state.actors.get(actor_id)
         if actor is None:
             return self._failure(f"알 수 없는 캐릭터입니다: {actor_id}")
@@ -189,9 +178,7 @@ class RuntimeSimulator:
 
         current_zone = self._current_zone(actor)
         if current_zone is None:
-            return self._failure(
-                f"{actor.display_name}가 상호작용 영역 안에 있지 않습니다."
-            )
+            return self._failure(f"{actor.display_name}가 상호작용 영역 안에 있지 않습니다.")
         if (
             current_zone.required_behavior is not None
             and current_zone.required_behavior is not behavior
@@ -230,12 +217,12 @@ class RuntimeSimulator:
 
         keys_set = set(keys)
         dt_seconds = duration_ms / 1000.0
-        
+
         # 고정된 델타 타임(약 33ms)으로 스텝을 나누어 정밀도 유지
         step_ms = 33.33
         step_count = max(1, int(duration_ms / step_ms))
         step_seconds = dt_seconds / step_count
-        
+
         for _ in range(step_count):
             next_pos = self._next_position_from_keys(
                 actor.position, keys_set, step_seconds, camera_yaw_degrees
@@ -251,11 +238,11 @@ class RuntimeSimulator:
         move_x, move_z = _movement_axis(keys_set, camera_yaw_degrees)
         if move_x != 0.0 or move_z != 0.0:
             actor.facing_degrees = degrees(atan2(move_x, move_z))
-        
+
         is_running = _running(keys_set)
         is_jumping = "Space" in keys_set
         mag = 1.0 if move_x != 0.0 or move_z != 0.0 else 0.0
-        
+
         # 동작 상태 결정 우선순위: 점프 > 달리기 > 걷기 > 대기
         if is_jumping:
             actor.behavior = ActorBehavior.JUMP
@@ -263,9 +250,9 @@ class RuntimeSimulator:
             actor.behavior = ActorBehavior.RUNNING if is_running else ActorBehavior.WALKING
         else:
             actor.behavior = ActorBehavior.IDLE
-            
+
         actor.gait = Gait.RUN if is_running else Gait.WALK
-        
+
         self.state.tick += 1
         self.state.status = ScenarioStatus.RUNNING
         return CommandResult(True, "이동 처리 완료", self.state.as_dict())
@@ -352,7 +339,7 @@ class RuntimeSimulator:
     def _current_zone(self, actor: Actor) -> Zone | None:
         nearest_zone = None
         min_distance = float("inf")
-        
+
         for zone in self.state.zones.values():
             dist = zone.center.distance_to(actor.position)
             if dist <= zone.radius:
@@ -527,22 +514,22 @@ class RuntimeSimulator:
         if self.state.flags.get("puzzle_solved", False):
             self._event("기억 퍼즐 게이트는 이미 열려 있습니다.")
             return
-        
+
         actor.behavior = ActorBehavior.INSPECT
-        
+
         # 이미 퍼즐이 진행 중인 상태에서 다시 누르면 처음(Phase 1)부터 다시 시작하도록 리셋
         if self.puzzle_phase > 0:
             self._event("기억 퍼즐을 처음부터 다시 시작합니다.")
             self.puzzle_phase = 1
         else:
             self.puzzle_phase = 1
-        
+
         self.puzzle_input_index = 0
-        
+
         # 퍼즐 진행 상태 플래그 초기화 (눌린 패드 효과 등)
         for pad_id in SIMON_PADS:
             self.state.flags[pad_id] = False
-        
+
         self.state.flags["puzzle_ready"] = True
         self._puzzle_cue_event(self.puzzle_sequence[: self.puzzle_phase])
 
@@ -669,9 +656,7 @@ class RuntimeSimulator:
         severity: str = "info",
         data: dict[str, Any] | None = None,
     ) -> None:
-        self.state.events.append(
-            WorldEvent(self.state.tick, time.time(), message, severity, data)
-        )
+        self.state.events.append(WorldEvent(self.state.tick, time.time(), message, severity, data))
 
     def _failure(self, message: str) -> CommandResult:
         self.state.tick += 1

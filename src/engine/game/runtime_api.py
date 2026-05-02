@@ -16,7 +16,6 @@ from pydantic import BaseModel
 
 from .a2a_cards import public_agent_cards
 from .adk_controller import _run_real_adk_turn, run_real_adk_turn, reset_adk_session_cache
-from .contracts import Gait
 from game_agent.agent import workshop_model_profiles
 from .simulation import RuntimeSimulator, create_default_simulator
 
@@ -124,7 +123,7 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
     async def broadcast_state(
         camera_commands_to_send: list[dict[str, Any]] | None = None,
         include_screenshot: bool = False,
-        request_screenshot: bool = False
+        request_screenshot: bool = False,
     ):
         world_inspect = runtime.inspect()
         world_inspect["camera"] = latest_camera_state
@@ -151,7 +150,9 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
             # 리스트 복사본을 순회하여 순회 중 삭제 안전성 확보
             current_sockets = active_websockets[:]
             print(f"[WS] Broadcasting state to {len(current_sockets)} clients")
-            await asyncio.gather(*(send_to_ws(ws) for ws in current_sockets), return_exceptions=True)
+            await asyncio.gather(
+                *(send_to_ws(ws) for ws in current_sockets), return_exceptions=True
+            )
         else:
             # 연결된 클라이언트가 없을 때의 디버그 출력
             pass
@@ -164,12 +165,14 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
             # 첫 연결시에만 스크린샷 포함 전송
             world_inspect = runtime.inspect()
             world_inspect["camera"] = latest_camera_state
-            await websocket.send_json({
-                "ok": True,
-                "state": world_inspect,
-                "screenshot": latest_screenshot,
-                "camera_commands": [],
-            })
+            await websocket.send_json(
+                {
+                    "ok": True,
+                    "state": world_inspect,
+                    "screenshot": latest_screenshot,
+                    "camera_commands": [],
+                }
+            )
             while True:
                 # 클라이언트로부터 메시지 수신 (입력 동기화 등)
                 data = await websocket.receive_json()
@@ -183,7 +186,7 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
                     )
                     # 이동 후 즉시 모든 클라이언트에게 상태 브로드캐스트
                     await broadcast_state()
-                
+
         except WebSocketDisconnect:
             pass
         finally:
@@ -214,16 +217,16 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
     async def capture() -> dict[str, Any]:
         """에이전트가 호출하는 실시간 스크린샷 요청 엔드포인트"""
         nonlocal pending_screenshot_event, current_screenshot_data
-        
+
         if not active_websockets:
             return {"ok": False, "error": "연결된 브라우저 클라이언트가 없습니다."}
-            
+
         pending_screenshot_event = asyncio.Event()
         current_screenshot_data = None
-        
+
         # 브라우저에게 스크린샷 요청 메시지 전송
         await broadcast_state(request_screenshot=True)
-        
+
         try:
             # 브라우저가 업로드할 때까지 최대 3초 대기
             await asyncio.wait_for(pending_screenshot_event.wait(), timeout=3.0)
@@ -272,12 +275,12 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
     async def upload_screenshot(request: ScreenshotRequest) -> dict[str, Any]:
         nonlocal latest_screenshot, current_screenshot_data
         latest_screenshot = request.screenshot_data_url
-        
+
         # 온디맨드 요청 대기 중인 경우 이벤트 해제
         if pending_screenshot_event:
             current_screenshot_data = request.screenshot_data_url
             pending_screenshot_event.set()
-            
+
         return {"ok": True}
 
     @app.post("/api/reset")
@@ -298,6 +301,7 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
     async def adk_debug() -> dict[str, Any]:
         import game_agent.agent as agent_module
         from .adk_controller import _cached_runner, _cached_session_id
+
         return {
             "ok": True,
             "agent_file": agent_module.__file__,
@@ -405,9 +409,7 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
 
 
 def main() -> None:
-    uvicorn.run(
-        "engine.game.runtime_api:create_app", factory=True, host="127.0.0.1", port=8787
-    )
+    uvicorn.run("engine.game.runtime_api:create_app", factory=True, host="127.0.0.1", port=8787)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi.testclient import TestClient
-from google.adk.agents import LlmAgent, LoopAgent
+from google.adk.agents import LoopAgent
 
 from game_agent import agent
 from game_agent import mcp_server
@@ -69,7 +69,7 @@ def test_drive_endpoint_updates_player_state() -> None:
             "actor_id": "rhea",
             "keys": ["KeyW", "ShiftLeft"],
             "camera_yaw_degrees": 0.0,
-            "duration_ms": 100.0
+            "duration_ms": 100.0,
         },
     )
 
@@ -139,7 +139,7 @@ def test_agent_visible_state_strips_visual_answer_payload() -> None:
     # as_dict is sorted by timestamp desc, so index 0 is latest
     assert "type" in state["events"][0].get("data", {})
     assert state["events"][0]["data"]["type"] == "puzzle_cue"
-    
+
     visible = game_observation.agent_visible_state(state)
 
     assert "actors" not in visible

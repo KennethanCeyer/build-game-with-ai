@@ -76,15 +76,8 @@ def diagnose_engine_state() -> dict[str, Any]:
     """
     runtime_diag = _runtime_get("/api/diagnostics")
     if runtime_diag is not None:
-        return {
-            "ok": True,
-            "diagnostics": runtime_diag,
-            "source": "engine_diagnostics"
-        }
-    return {
-        "ok": False,
-        "msg": "진단 정보 획득 실패. 엔진 통신 상태 확인 필요."
-    }
+        return {"ok": True, "diagnostics": runtime_diag, "source": "engine_diagnostics"}
+    return {"ok": False, "msg": "진단 정보 획득 실패. 엔진 통신 상태 확인 필요."}
 
 
 _tool_budgets = {
@@ -94,6 +87,7 @@ _tool_budgets = {
 }
 _tool_counts = {}
 _tool_cache = {}
+
 
 def _claim_budget(tool_name: str) -> dict[str, Any] | None:
     limit = _tool_budgets.get(tool_name, 999)
@@ -110,15 +104,17 @@ def _claim_budget(tool_name: str) -> dict[str, Any] | None:
             ),
             "observation_complete": True,
             "must_finalize_observation": True,
-            "cached_result": _tool_cache.get(tool_name)
+            "cached_result": _tool_cache.get(tool_name),
         }
     _tool_counts[tool_name] = count + 1
     return None
+
 
 def _reset_tool_budgets():
     global _tool_counts, _tool_cache
     _tool_counts.clear()
     _tool_cache.clear()
+
 
 @mcp.tool()
 def capture_visual_observation(reason: str = "visual QA") -> types.ImageContent | dict[str, Any]:
@@ -157,7 +153,7 @@ def capture_visual_crop(
     width: int,
     height: int,
 ) -> types.ImageContent | dict[str, Any]:
-    """특정 영역(x, y, width, height)만 집중적으로 관측합니다. 
+    """특정 영역(x, y, width, height)만 집중적으로 관측합니다.
     작은 물체나 퍼즐 텍스트를 정밀하게 확인해야 할 때 사용하십시오.
     """
     budget_error = _claim_budget("capture_visual_crop")
@@ -323,9 +319,23 @@ def _runtime_base_url() -> str | None:
 
 
 PLAYER_ALIASES = {
-    "", "player", "player1", "player_0", "player_01", "player 1",
-    "player character", "local_player", "avatar", "character", "pc",
-    "user", "self", "agent", "default", "캐릭터", "캐릭터1",
+    "",
+    "player",
+    "player1",
+    "player_0",
+    "player_01",
+    "player 1",
+    "player character",
+    "local_player",
+    "avatar",
+    "character",
+    "pc",
+    "user",
+    "self",
+    "agent",
+    "default",
+    "캐릭터",
+    "캐릭터1",
 }
 
 

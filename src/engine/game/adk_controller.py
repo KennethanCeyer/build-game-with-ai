@@ -4,7 +4,6 @@ import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from google.adk.runners import Runner
 from google.adk.apps.app import App, EventsCompactionConfig
@@ -59,18 +58,18 @@ def summarize_observation_response(response: Any) -> str:
     """관측 결과를 요약하여 UI에 표시합니다."""
     if not isinstance(response, dict):
         return str(response)[:100]
-    
+
     if response.get("budget_exhausted"):
         return f"⚠️ {response.get('message', '예산 소진')}"
-        
-    summary = response.get("summary", {}) # inspect_game_state에서 summary를 넣어주는 경우
+
+    summary = response.get("summary", {})  # inspect_game_state에서 summary를 넣어주는 경우
     nav = response.get("navigation_observation", {})
-    
+
     # inspect_game_state 반환 구조 대응
     player = response.get("player", {})
     pos = player.get("debug_position") if player else summary.get("pos", "unknown")
     goals = response.get("goals", [])
-    
+
     return (
         f"✅ 관측 완료: 위치={pos}, 목표={goals}, "
         f"통로={nav.get('maze_corridors', 'N/A')}, "
@@ -105,7 +104,7 @@ def _run_real_adk_turn(
     tool_call_counts: dict[tuple[str, str], int] = {}
     total_tool_calls = 0
     MAX_TOTAL_TOOL_CALLS = 50
-    
+
     # 에이전트/도구별 엄격한 예산 설정
     MAX_TOOL_CALLS_BY_AGENT = {
         ("state_observer_agent", "inspect_game_state"): 3,
@@ -137,22 +136,27 @@ def _run_real_adk_turn(
         ):
             event_dump = event.model_dump(mode="json", exclude_none=True)
             raw_events.append(event_dump)
-            
+
             # 1. author 기반 에이전트 전환 감지
             author = event_dump.get("author")
             if author and author != current_agent and emit is not None:
                 current_agent = author
-                profile = sub_agent_profiles.get(author, {
-                    "agent_name": author,
-                    "model": model,
-                    "role": "delegated worker",
-                })
-                emit({
-                    "type": "agent_switch",
-                    "agent_name": profile["agent_name"],
-                    "model": profile.get("model", model),
-                    "role": profile.get("role", "")
-                })
+                profile = sub_agent_profiles.get(
+                    author,
+                    {
+                        "agent_name": author,
+                        "model": model,
+                        "role": "delegated worker",
+                    },
+                )
+                emit(
+                    {
+                        "type": "agent_switch",
+                        "agent_name": profile["agent_name"],
+                        "model": profile.get("model", model),
+                        "role": profile.get("role", ""),
+                    }
+                )
 
             # 모델의 가시적 텍스트 출력
             if event.content and event.content.parts:
@@ -171,8 +175,10 @@ def _run_real_adk_turn(
                 tool_call_counts[key] = tool_call_counts.get(key, 0) + 1
 
                 if total_tool_calls > MAX_TOTAL_TOOL_CALLS:
-                    raise RuntimeError(f"과도한 도구 호출({total_tool_calls}회)로 실행을 중단했습니다.")
-                
+                    raise RuntimeError(
+                        f"과도한 도구 호출({total_tool_calls}회)로 실행을 중단했습니다."
+                    )
+
                 # 에이전트/도구별 예산 체크
                 limit = MAX_TOOL_CALLS_BY_AGENT.get((current_agent, call_name))
                 if limit is not None and tool_call_counts[key] > limit:
@@ -180,7 +186,7 @@ def _run_real_adk_turn(
                         f"[{current_agent}]이 {call_name}을 반복 호출({tool_call_counts[key]}회)하여 중단했습니다. "
                         f"이 단계의 도구 예산({limit}회)을 초과했습니다."
                     )
-                
+
                 # 2. 도구 호출 의도 시각화
                 if emit is not None:
                     emit({"type": "agent_thought", "text": visible_tool_plan(call_name, call_args)})
@@ -188,12 +194,14 @@ def _run_real_adk_turn(
                 # 3. transfer_to_agent 명시적 처리
                 if call_name == "transfer_to_agent" and emit is not None:
                     target = str(call_args.get("agent_name", "하위 에이전트"))
-                    emit({
-                        "type": "agent_switch",
-                        "agent_name": target,
-                        "model": model,
-                        "role": "delegated agent"
-                    })
+                    emit(
+                        {
+                            "type": "agent_switch",
+                            "agent_name": target,
+                            "model": model,
+                            "role": "delegated agent",
+                        }
+                    )
 
                 tool_event = {
                     "type": "tool_call",
@@ -210,7 +218,9 @@ def _run_real_adk_turn(
                                 "type": "input_buffer",
                                 "actor_id": "rhea",
                                 "frames": normalized_frames,
-                                "camera_yaw_degrees": float(call_args.get("camera_yaw_degrees", 0.0)),
+                                "camera_yaw_degrees": float(
+                                    call_args.get("camera_yaw_degrees", 0.0)
+                                ),
                             }
                         )
             for response in event.get_function_responses():
@@ -242,9 +252,8 @@ def _run_real_adk_turn(
     except Exception as exc:
         final_text = f"❌ 실행 오류: {str(exc)}"
 
-
     state = runtime.inspect()
-    
+
     # 4. 최종 응답 보존 로직 (무조건 덮어쓰지 않음)
     tool_summary = answer_from_tool_events(tool_events)
     if not final_text:
@@ -289,46 +298,36 @@ def reset_adk_session_cache() -> None:
 def _build_runner(model: str, fresh_session: bool = False) -> tuple[Runner, str]:
     """ADK Runner 인스턴스를 생성하거나 캐시된 인스턴스를 반환합니다."""
     global _cached_runner, _cached_session_id
-    
+
     if not fresh_session and _cached_runner is not None and _cached_session_id is not None:
         return _cached_runner, _cached_session_id
 
     import game_agent.agent as agent_module
+
     print(f"[ADK DEBUG] Building runner. agent.py = {agent_module.__file__}")
     print(f"[ADK DEBUG] Observer tools = {getattr(agent_module, 'OBSERVER_TOOLS', [])}")
 
     agent = build_loop_agent(model=model)
     app_name = "game_playtest_app"
-    
+
     app = App(
         name=app_name,
         root_agent=agent,
-        events_compaction_config=EventsCompactionConfig(
-            compaction_interval=3,
-            overlap_size=1
-        ),
+        events_compaction_config=EventsCompactionConfig(compaction_interval=3, overlap_size=1),
         context_cache_config=ContextCacheConfig(
-            min_tokens=2048,
-            ttl_seconds=600,
-            cache_intervals=5
-        )
+            min_tokens=2048, ttl_seconds=600, cache_intervals=5
+        ),
     )
-    
-    session = _session_service.create_session_sync(
-        app_name=app_name,
-        user_id="browser"
-    )
-    
-    runner = Runner(
-        app=app,
-        session_service=_session_service
-    )
-    
+
+    session = _session_service.create_session_sync(app_name=app_name, user_id="browser")
+
+    runner = Runner(app=app, session_service=_session_service)
+
     if not fresh_session:
         _cached_runner = runner
         _cached_session_id = session.id
         print(f"[ADK DEBUG] Cached runner and session_id: {session.id}")
-    
+
     return runner, session.id
 
 

@@ -45,6 +45,7 @@ def trace_from_adk_events(
 
 from .game_observation import agent_visible_state
 
+
 def summarize_tool_response(value: Any) -> Any:
     if not isinstance(value, dict):
         return value
@@ -81,25 +82,25 @@ def answer_from_tool_events(tool_events: list[dict[str, Any]]) -> str:
         state = response.get("state")
         if not isinstance(state, dict):
             continue
-            
+
         visible_state = agent_visible_state(state) if "actors" in state else state
         player = visible_state.get("player", {})
         flags = visible_state.get("flags", {})
         goals = visible_state.get("goals", [])
         events = visible_state.get("events", [])
-        
+
         nearby = None
         if isinstance(player, dict):
             nearby_data = player.get("nearby_interaction")
             if isinstance(nearby_data, dict):
                 nearby = nearby_data.get("name")
-        
+
         recent_message = ""
         if isinstance(events, list) and events:
             last_event = events[-1]
             if isinstance(last_event, dict):
                 recent_message = str(last_event.get("message", ""))
-                
+
         return (
             "현재 런타임 관찰을 기준으로 정리하면, "
             f"목표 상태는 {goals}, 완료 플래그는 {flags}입니다. "

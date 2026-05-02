@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 
-from google.adk.agents import LlmAgent, LoopAgent, SequentialAgent
+from google.adk.agents import LlmAgent, LoopAgent
 from google.adk.tools import exit_loop
 from google.genai import types
 
@@ -119,10 +119,10 @@ def build_loop_agent(model: str = "gemini-3.1-pro-preview") -> LoopAgent:
             "- 미로, 장애물, 상호작용 지점 근처에서는 250ms에서 350ms 단위의 짧은 입력을 우선하십시오.\n"
             "- 형식 예시:\n"
             "{\n"
-            "  \"task\": \"maze_navigation\",\n"
-            "  \"camera_yaw_degrees\": 0,\n"
-            "  \"frames\": [{\"keys\": [\"KeyW\"], \"duration_ms\": 300}],\n"
-            "  \"expected_result\": \"player moved closer to the corridor\"\n"
+            '  "task": "maze_navigation",\n'
+            '  "camera_yaw_degrees": 0,\n'
+            '  "frames": [{"keys": ["KeyW"], "duration_ms": 300}],\n'
+            '  "expected_result": "player moved closer to the corridor"\n'
             "}"
         ),
         static_instruction=STATIC_GAME_RULES,
@@ -170,7 +170,7 @@ def build_loop_agent(model: str = "gemini-3.1-pro-preview") -> LoopAgent:
         ),
         static_instruction=STATIC_GAME_RULES,
         tools=[exit_loop, build_agent_toolset(["load_memory", "diagnose_engine_state"])],
-        sub_agents=[...], # TODO: worker_pipeline을 등록하세요.
+        sub_agents=[...],  # TODO: worker_pipeline을 등록하세요.
     )
 
     # [문제 4] 전체 시스템을 자율적으로 구동할 LoopAgent를 정의하세요.

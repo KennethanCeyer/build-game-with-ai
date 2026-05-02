@@ -17,17 +17,13 @@ def agent_visible_state(state: dict[str, Any]) -> dict[str, Any]:
 
     player = _player_actor(state)
     nearby = _nearby_interaction(state, player)
-    
+
     # 이벤트를 최신순 정렬 후 요약 제공
     raw_events = state.get("events", [])
-    sorted_events = sorted(
-        raw_events, 
-        key=lambda e: float(e.get("timestamp", 0)), 
-        reverse=True
-    )
-    
+    sorted_events = sorted(raw_events, key=lambda e: float(e.get("timestamp", 0)), reverse=True)
+
     visible_events: list[dict[str, Any]] = []
-    for event in sorted_events[:10]: # 상위 10개로 축소
+    for event in sorted_events[:10]:  # 상위 10개로 축소
         if not isinstance(event, dict):
             continue
         visible_events.append(_visible_event(event))
