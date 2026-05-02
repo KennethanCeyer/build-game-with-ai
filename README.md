@@ -216,10 +216,10 @@ GOOGLE_API_KEY=여러분의_Gemini_API_KEY
 ```
 
 ### 실행 및 확인
-환경 설정이 모두 끝났다면 `python run_game.py` 명령어를 입력해 전체 시스템을 실행해 봅시다.
+환경 설정이 모두 끝났다면 `python run_game.py handson` 명령어를 입력해 전체 시스템을 실행해 봅시다.
 
 ```bash
-python run_game.py
+python run_game.py handson
 ```
 
 > [!TIP]
@@ -233,19 +233,39 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://127.0.0.1:8787
 ```
 
-로그를 확인했다면 이제 브라우저에서 `http://127.0.0.1:8787` 주소에 접속해 봅시다. 화면 좌측 상단에 있는 입력창에 미로를 탈출해줘와 같은 명령어를 직접 입력하고 Enter를 눌러 보세요.
-
-![실제 게임 실행 화면](./assets/in-game-screen.png)
-
-### 에러 로그 확인 및 원인 파악
-명령어를 입력해 보셨나요? 아마 터미널에는 아래와 같은 ValidationError가 발생하며 에이전트가 움직이지 않을 것입니다.
+명령어를 입력해 보셨나요? 아마 터미널에는 아래와 같은 `ValidationError`가 발생하며 실행되지 않을 것입니다.
 
 ```text
-pydantic_core._pydantic_core.ValidationError: 2 validation errors for LoopAgent
+(.venv) sniper45han@cloudshell:~/build-game-with-ai (gde-project-aicloud)$ python run_game.py handson
+--- Starting Agentic Game Demo in [handson] mode ---
+/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/authlib/_joserfc_helpers.py:8: AuthlibDeprecationWarning: authlib.jose module is deprecated, please use joserfc instead.
+It will be compatible before version 2.0.0.
+  from authlib.jose import ECKey
+/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/google/adk/features/_feature_decorator.py:72: UserWarning: [EXPERIMENTAL] feature FeatureName.PLUGGABLE_AUTH is enabled.
+  check_feature_enabled()
+Traceback (most recent call last):
+  File "/home/sniper45han/build-game-with-ai/run_game.py", line 22, in <module>
+    from engine.game.runtime_api import main  # noqa: E402
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sniper45han/build-game-with-ai/src/engine/game/runtime_api.py", line 17, in <module>
+    from .a2a_cards import public_agent_cards
+  File "/home/sniper45han/build-game-with-ai/src/engine/game/a2a_cards.py", line 6, in <module>
+    from game_agent.agent import STRATEGY_AGENT
+  File "/home/sniper45han/build-game-with-ai/handson/game_agent/__init__.py", line 3, in <module>
+    from .agent import root_agent
+  File "/home/sniper45han/build-game-with-ai/handson/game_agent/agent.py", line 230, in <module>
+    root_agent = build_loop_agent()
+                 ^^^^^^^^^^^^^^^^^^
+  File "/home/sniper45han/build-game-with-ai/handson/game_agent/agent.py", line 159, in build_loop_agent
+    supervisor = LlmAgent(
+                 ^^^^^^^^^
+  File "/home/sniper45han/build-game-with-ai/.venv/lib/python3.12/site-packages/pydantic/main.py", line 263, in __init__
+    validated_self = self.__pydantic_validator__.validate_python(data, self_instance=self)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pydantic_core._pydantic_core.ValidationError: 1 validation error for LlmAgent
 sub_agents.0
   Input should be a valid dictionary or instance of BaseAgent [type=model_type, input_value=Ellipsis, input_type=ellipsis]
-max_iterations
-  Input should be a valid integer [type=int_type, input_value=Ellipsis, input_type=ellipsis]
+    For further information visit https://errors.pydantic.dev/2.13/v/model_type
 ```
 
 이 에러는 우리가 수정해야 할 `handson/game_agent/agent.py` 파일 내 설정값이 아직 `...`으로 비어 있기 때문에 발생하는 지극히 정상적인 현상입니다. 자 이제 이 에러를 하나씩 지워나가며 에이전트의 구성을 직접 완성해 봅시다.
