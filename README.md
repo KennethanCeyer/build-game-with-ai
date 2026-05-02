@@ -212,7 +212,13 @@ pip install -r requirements.txt
 ```
 
 ### 환경 변수 설정 (.env)
-에이전트가 Gemini 모델과 통신하여 데이터를 분석하려면 인증을 위한 API 키가 필요합니다. 프로젝트 최상단 경로에 `.env` 파일을 생성하고 본인의 API 키를 저장합니다.
+에이전트가 Gemini 모델과 통신하려면 API 키가 필요합니다. 제공된 템플릿 파일을 복사하여 `.env` 파일을 생성하고 본인의 API 키를 저장합니다.
+
+```bash
+cp .env.template .env
+```
+
+생성된 `.env` 파일을 열어 `GOOGLE_API_KEY` 항목에 여러분의 키를 입력합니다.
 ```env
 GOOGLE_API_KEY=여러분의_Gemini_API_KEY
 ```
