@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass
 
-from google.adk.agents import LlmAgent, LoopAgent
+from google.adk.agents import LlmAgent, LoopAgent, SequentialAgent # noqa: F401
 from google.adk.tools import exit_loop
 from google.genai import types
 
