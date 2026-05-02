@@ -367,7 +367,6 @@ class RuntimeSimulator:
         move_x, move_z = _movement_axis(keys, camera_yaw_degrees)
         if move_x == 0.0 and move_z == 0.0:
             return position
-        # 클라이언트(main.js)와 속도값 동기화 (7.5 / 3.8)
         speed = 7.5 if _running(keys) else 3.8
         return Vec3(
             _clamp(position.x + move_x * speed * step_seconds, -WORLD_X_LIMIT, WORLD_X_LIMIT),

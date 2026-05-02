@@ -162,7 +162,6 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
         if active_websockets:
             # 리스트 복사본을 순회하여 순회 중 삭제 안전성 확보
             current_sockets = active_websockets[:]
-            print(f"[WS] Broadcasting state to {len(current_sockets)} clients")
             await asyncio.gather(
                 *(send_to_ws(ws) for ws in current_sockets), return_exceptions=True
             )
@@ -187,7 +186,6 @@ def create_app(simulator: RuntimeSimulator | None = None) -> FastAPI:
                 }
             )
             while True:
-                # 클라이언트로부터 메시지 수신 (입력 동기화 등)
                 data = await websocket.receive_json()
                 if data.get("type") == "drive":
                     # HTTP POST /api/drive와 동일한 로직을 WebSocket 스트림에서 처리
